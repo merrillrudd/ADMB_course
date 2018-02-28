@@ -1,40 +1,40 @@
 # ADMB for fisheries stock assessment development and application
 
-### Developed for the Alaska Department of Fish and Game, Juneau, AK
+### Alaska Department of Fish and Game, Juneau, AK
 ### March 13-16, 2018
 
 #### Course outline
 
 Day 1 
 
-* Introduction to ADMB
+* Introduction to ADMB and statistical overview
 
-* Statistical background
+* ADMB approach, syntax, files, and output
 
-* ADMB approach and syntax
-
-* ADMB files and output
-
-* Estimation examples (with focus on age-structured model)
-
-Day 2
-
-* Using ADMB with R
-
-* Functions and libraries
-
-* Debugging
-
-* Model diagnostics
-
-* Model selection
+* ADMB workflow with R
 
 * Visualizing results
 
+* Example: growth model
+
+Day 2
+
+* Overview of age-structured models
+
+* Example: age-structured model
+
+* Debugging
+
+* Model diagnostics and selection
+
 Day 3 
 
-* Simulation
+* Using ADMB for simulation
 
 * Retrospective analysis
 
-* Introduction to Git
+* Likelihood profiles and MCMC with ADMB
+
+Day 4
+
+* Work with Alaska-specific examples
