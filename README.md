@@ -1,10 +1,11 @@
 # ADMB for fisheries stock assessment development and application
 
-### Developed for the Alaska Department of Fish and Game, Juneau, AK
+### Alaska Department of Fish and Game, Juneau, AK
 ### March 13-16, 2018
 
 #### Course outline
 
+<<<<<<< HEAD
 Day 1
 Tuesday, March 13
 AM: 
@@ -13,6 +14,7 @@ ADMB approach, syntax, files, and output
 PM:
 Debugging
 Exercises
+
 
 Day 2
 Wednesday, March 14
@@ -33,5 +35,3 @@ Characterizing uncertainty
 
 Day 4
 Participants bring in their own data and work to build models in ADMB, with the instructor available to help. 
-
-
