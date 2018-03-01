@@ -5,36 +5,33 @@
 
 #### Course outline
 
-Day 1 
-
-* Introduction to ADMB
-
-* Statistical background
-
-* ADMB approach and syntax
-
-* ADMB files and output
-
-* Estimation examples (with focus on age-structured model)
+Day 1
+Tuesday, March 13
+AM: 
+Course overview and introduction to ADMB
+ADMB approach, syntax, files, and output
+PM:
+Debugging
+Exercises
 
 Day 2
+Wednesday, March 14
+AM:
+Using ADMB with R
+Visualizing results
+PM: 
+Age-structured models
+Model diagnostics and selection
 
-* Using ADMB with R
+Day 3
+Thursday, March 15
+AM: 
+Using ADMB for simulation
+Retrospective analysis
+PM: 
+Characterizing uncertainty
 
-* Functions and libraries
+Day 4
+Participants bring in their own data and work to build models in ADMB, with the instructor available to help. 
 
-* Debugging
 
-* Model diagnostics
-
-* Model selection
-
-* Visualizing results
-
-Day 3 
-
-* Simulation
-
-* Retrospective analysis
-
-* Introduction to Git
