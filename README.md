@@ -5,7 +5,6 @@
 
 #### Course outline
 
-<<<<<<< HEAD
 Day 1
 Tuesday, March 13
 AM: 
