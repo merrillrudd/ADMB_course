@@ -1,6 +1,8 @@
 DATA_SECTION
   init_int nobs;
   init_vector Y(1,nobs);
+  init_vector x(1,nobs);
+  init_int eof;
   
   LOCAL_CALCS
   if(eof!=999){
@@ -22,7 +24,7 @@ PROCEDURE_SECTION
   pred_Y = a*x+b;
   sqdev = square(pred_Y-Y);
   f = sum(sqdev);
-  
+
 REPORT_SECTION
   report << "Observed" << endl;
   report << Y << endl;
@@ -34,3 +36,9 @@ REPORT_SECTION
   report << b << endl; 
   report << "NLL" << endl;
   report <<  f << endl;
+
+  ofstream f1("Param_est");
+  f1 << "Parameter a" << endl;
+  f1 << a << endl;
+  f1 << "Parameter b" << endl;
+  f1 << b << endl;
