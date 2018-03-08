@@ -1,6 +1,0 @@
- The logarithm of the determinant of the hessian = -10.7728
- index   name       value      std dev       1       2       3       4   
-     1   Rmax     6.5959e+002 8.6069e+001   1.0000
-     2   Smax     3.0968e+002 6.3833e+001   0.9244  1.0000
-     3   logSigma -1.0863e+000 1.0426e-001  -0.0000 -0.0000  1.0000
-     4   sigma    3.3746e-001 3.5183e-002  -0.0000 -0.0000  1.0000  1.0000
