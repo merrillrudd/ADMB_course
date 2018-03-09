@@ -1,0 +1,141 @@
+#if !defined(_SCA_)
+#  define _SCA_
+
+class model_data : public ad_comm{
+  int sim;
+  int rseed;
+  init_adstring datafile;
+  init_adstring ctlfile;
+  data_int syr;
+  data_int eyr;
+  data_int nage;
+  data_number fwalpha;
+  data_number fwrho;
+  data_number wla;
+  data_number wlb;
+  data_vector yt;
+  data_vector ct;
+  data_matrix pat;
+  data_number iro;
+  data_number icr;
+  data_number irbar;
+  data_number ifbar;
+  data_number iahat;
+  data_number ighat;
+  data_int eof;
+  int iter;
+  dvector age;
+  dvector la;
+  dvector wa;
+  dvector fa;
+  double m;
+  double vbk;
+  double linf;
+  data_number simsig;
+  data_number simtau;
+  data_number simqo;
+  data_number simao;
+  data_number simro;
+  data_number simcr;
+  data_number simrbar;
+  data_number simahat;
+  data_number simghat;
+  data_vector simF;
+  data_int eofc;
+  ~model_data();
+  model_data(int argc,char * argv[]);
+  friend class model_parameters;
+};
+
+class model_parameters : public model_data ,
+  public function_minimizer
+{
+public:
+  ~model_parameters();
+  void preliminary_calculations(void);
+  void set_runtime(void);
+  virtual void * mycast(void) {return (void*)this;}
+  static int mc_phase(void)
+  {
+    return initial_params::mc_phase;
+  }
+  static int mceval_phase(void)
+  {
+    return initial_params::mceval_phase;
+  }
+  static int sd_phase(void)
+  {
+    return initial_params::sd_phase;
+  }
+  static int current_phase(void)
+  {
+    return initial_params::current_phase;
+  }
+  static int last_phase(void)
+  {
+    return (initial_params::current_phase
+      >=initial_params::max_number_phases);
+  }
+  static prevariable current_feval(void)
+  {
+    return *objective_function_value::pobjfun;
+  }
+private:
+  ivector integer_control_flags;
+  dvector double_control_flags;
+  param_init_number log_ro;
+  param_init_number log_cr;
+  param_init_number log_rbar;
+  param_init_number log_fbar;
+  param_init_bounded_number ahat;
+  param_init_bounded_number ghat;
+  param_init_number ptdev;
+  param_init_bounded_number rho;
+  param_init_bounded_dev_vector wt;
+  param_init_bounded_dev_vector log_ft_dev;
+  param_number prior_function_value;
+  param_number likelihood_function_value;
+  objective_function_value nll;
+  param_number ro;
+  param_number cr;
+  param_number rbar;
+  param_number fbar;
+  param_number so;
+  param_number beta;
+  param_number q;
+  param_number fmsy;
+  param_number msy;
+  param_number bmsy;
+  param_number sig;
+  param_number tau;
+  param_stddev_number tdev;
+  param_vector va;
+  param_vector ft;
+  param_vector bt;
+  param_vector ct_hat;
+  param_vector ct_resid;
+  param_vector yt_resid;
+  param_vector rt;
+  param_vector rt_resid;
+  param_matrix Nt;
+  param_matrix Zt;
+  param_matrix pahat;
+public:
+  virtual void userfunction(void);
+  virtual void report(const dvector& gradients);
+  virtual void final_calcs(void);
+  model_parameters(int sz,int argc, char * argv[]);
+  virtual void initializationfunction(void){}
+  void initialization(void);
+  void statedynamics(void);
+  void observation_model(void);
+  void stock_recruit_model(void);
+  void objective_function(void);
+  void mcmc_output(void);
+  void forecast(void);
+  void run_data_simulation(void);
+ void calc_partials(const double& fe, double& phie, double& phif, double& phiq, double& dphif_df, double& dphiq_df, double& dRe_df);
+ void get_CF(double& fe, double& msy,double& bmsy);
+
+};
+#endif
