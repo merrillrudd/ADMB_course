@@ -49,5 +49,5 @@ Participants bring in their own data and work to build models in ADMB, with the 
 
 #### Acknowledgements
 
-Course materials were developed from previous courses taught by Arni Magnusson, Anders Nielsen, Rob Ahrens, and Andre Punt.
+Course materials were developed from previous courses taught by Arni Magnusson, Anders Nielsen, Rob Ahrens, Steve Martell, and Andre Punt.
 
