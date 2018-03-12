@@ -5,7 +5,7 @@
 
 #### Course outline
 
-Day 1
+* Day 1
 Tuesday, March 13
 
 Course overview and introduction to ADMB
@@ -20,7 +20,7 @@ Debugging
 
 
 
-Day 2
+* Day 2
 Wednesday, March 14
 
 Fisheries model examples:
@@ -30,7 +30,7 @@ Estimating uncertainty
 
 
 
-Day 3
+* Day 3
 Thursday, March 15
 
 Estimating uncertainty continued
@@ -41,7 +41,7 @@ Retrospective analysis
 
 
 
-Day 4
+* Day 4
 Friday, March 16
 
 Participants bring in their own data and work to build models in ADMB, with the instructor available to help. 
