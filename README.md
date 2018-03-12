@@ -45,3 +45,9 @@ Retrospective analysis
 Friday, March 16
 
 Participants bring in their own data and work to build models in ADMB, with the instructor available to help. 
+
+
+#### Acknowledgements
+
+Course materials were developed from previous courses taught by Arni Magnusson, Anders Nielsen, Rob Ahrens, and Andre Punt.
+
