@@ -19,22 +19,27 @@ Developing likelihoods
 Debugging
 
 
+
 Day 2
 Wednesday, March 14
 
 Fisheries model examples:
 Nonlinear models, age-structured models
 
-Model diagnostics and selection
+Estimating uncertainty
+
+
 
 Day 3
 Thursday, March 15
 
-Estimating uncertainty
+Estimating uncertainty continued
 
 Simulation
 
 Retrospective analysis
+
+
 
 Day 4
 Friday, March 16
