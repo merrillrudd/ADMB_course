@@ -11,6 +11,7 @@ PARAMETER_SECTION
   init_number logSigma;
   sdreport_number sigma;
   sdreport_vector Lpred(1,nobs);
+  likeprof_number Linf_prof;
   number RSS;
   objective_function_value nll;
 
@@ -20,6 +21,7 @@ PRELIMINARY_CALCS_SECTION
   Linf = 1.1 * max(Lobs);  // sensible starting value
 
 PROCEDURE_SECTION
+  Linf_prof = Linf; 
   Lpred = Linf * (1.0 - exp(-K * (ages - t0)));
   RSS = sum(square(Lobs-Lpred));
   sigma = exp(logSigma);

@@ -24,4 +24,6 @@ PROCEDURE_SECTION
   RSS = sum(square(Lobs-Lpred));
   sigma = exp(logSigma);
   nll = 0.5 * nobs * log(2.0 * M_PI) + (nobs * logSigma) + (RSS / (2.0*square(sigma)));
-  
+
+  if(mceval_phase())
+  cout << Linf << K << endl;

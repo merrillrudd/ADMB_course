@@ -6,21 +6,8 @@
 
 DATA_SECTION
   init_int n;
-  //!! TRACE(n)
   init_vector y(1,n);
-  //!! TRACE(y)
   init_vector x(1,n);
-  //!! TRACE(x)
-  init_int eof;
- // !! TRACE(eof)
-  //!! ad_exit(0);
-
-  !!if(eof!=999){
-  !!        cout << "Error reading data file." <<endl;
-  !!        ad_exit(1);
-  !!}
-  !!if(eof==999) cout << "Data read correctly!" << endl;
-          
   
 PARAMETER_SECTION
   init_number a;
