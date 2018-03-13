@@ -1,9 +1,3 @@
-// GLOBALS_SECTION
-  // #include <fstream>
-  // ofstream clogf("program.log");
-  // #define TRACE(obj);
-  // clogf <<"line "<<__LINE__<<", file "<<__FILE__<< endl;
-
 DATA_SECTION
   init_int n;
   init_vector y(1,n);
