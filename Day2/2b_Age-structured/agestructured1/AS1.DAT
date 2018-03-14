@@ -1,18 +1,18 @@
-# Number of years
+# Nyear: Number of years
 20
-# Number of ages
+# Nage: Number of ages
 12
-# Natural mortality
+# Mval:  Natural mortality
 0.2
-# Weight-at-age
+# Weight: Weight-at-age from 0 to Nage
 0.0000  0.0060  0.0358  0.0918  0.1670  0.2526  0.3412  0.4276  0.5084  0.5816  0.6465  0.7031  0.7518
-# CV (Catch)
+# SigCatch: CV (Catch)
 0.05
-# Sigma (log-CPUE)
+# SigCPUE: Sigma (log-CPUE)
 0.2
-# Omega (proportion data)
+# Omega: Weight for proportion data
 50
-#Year    Catch   CPUE
+#CatchCPUE: Year    Catch   CPUE
 1   0.5350  4.5388                                      
 2	0.9670	5.2040										
 3	1.2243	5.2759										
@@ -33,7 +33,7 @@
 18	0.5966	0.8695											
 19	0.5952	1.6363											
 20  0.5915  1.1494
-# catch-at-age
+# Propn: catch-at-age
 #Year    0   1   2   3   4   5   6   7   8   9   10  11  12
 1   0.0000  0.0200  0.0200  0.0600  0.1000  0.1700  0.1100  0.0900  0.1400  0.1300  0.0700  0.0300  0.0600
 2	0.0000	0.0100	0.0400	0.1200	0.1300	0.1500	0.1100	0.1100	0.0700	0.0900	0.0500	0.0700	0.0500

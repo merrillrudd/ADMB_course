@@ -38,7 +38,6 @@ PARAMETER_SECTION
   number ss
   vector logFAextend(minAge,maxAge)
   sdreport_vector ssb(minYear,maxYear)
-  sdreport_vector fbar24(minYear,maxYear)
 
 PROCEDURE_SECTION
   logFAextend.initialize();
@@ -68,5 +67,4 @@ PROCEDURE_SECTION
     }
   }
   ssb=colsum(elem_prod(elem_prod(exp(logN),propMature),stockMeanWeight));
-  fbar24=colsum(F.sub(2,4))/3.0;
 
