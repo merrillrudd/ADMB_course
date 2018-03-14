@@ -1,5 +1,5 @@
 wd <- "C:\\merrill\\ADMB_course"
-project_dir <- file.path(wd, "Day3", "3a_Uncertainty", "likeprof", "vonbert")
+project_dir <- file.path(wd, "Day2", "2c_Uncertainty", "likeprof", "vonbert")
 setwd(project_dir)
 
 ### read in results from report file using code in tools.R

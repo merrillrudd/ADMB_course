@@ -30,6 +30,7 @@ model_parameters::model_parameters(int sz,int argc,char * argv[]) :
   logSigma.allocate("logSigma");
   sigma.allocate("sigma");
   Lpred.allocate(1,nobs,"Lpred");
+  Linf_prof.allocate("Linf_prof");
   RSS.allocate("RSS");
   #ifndef NO_AD_INITIALIZE
   RSS.initialize();
@@ -55,12 +56,11 @@ void model_parameters::preliminary_calculations(void)
 void model_parameters::userfunction(void)
 {
   nll =0.0;
+  Linf_prof = Linf; 
   Lpred = Linf * (1.0 - exp(-K * (ages - t0)));
   RSS = sum(square(Lobs-Lpred));
   sigma = exp(logSigma);
   nll = 0.5 * nobs * log(2.0 * M_PI) + (nobs * logSigma) + (RSS / (2.0*square(sigma)));
-  if(mceval_phase())
-  cout << Linf << K << endl;
 }
 
 model_data::~model_data()

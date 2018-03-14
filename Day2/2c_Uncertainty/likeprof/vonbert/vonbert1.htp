@@ -53,6 +53,7 @@ private:
   param_init_number logSigma;
   param_stddev_number sigma;
   param_stddev_vector Lpred;
+  param_likeprof_number Linf_prof;
   param_number RSS;
   param_number prior_function_value;
   param_number likelihood_function_value;

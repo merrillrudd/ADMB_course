@@ -4,6 +4,10 @@ DATA_SECTION
   vector ages(1,nobs);
   vector Lobs(1,nobs);
 
+  //used for mcmc
+  int iter;
+  !! iter = 0;
+
 PARAMETER_SECTION
   init_number Linf;
   init_number K;
@@ -25,5 +29,16 @@ PROCEDURE_SECTION
   sigma = exp(logSigma);
   nll = 0.5 * nobs * log(2.0 * M_PI) + (nobs * logSigma) + (RSS / (2.0*square(sigma)));
 
-  if(mceval_phase())
-  cout << Linf << K << endl;
+  if(mceval_phase()){
+    mcmc_output();
+  }
+
+FUNCTION mcmc_output
+	if(iter==0)
+	{
+		ofstream ofs("refpar.mcmc");
+		ofs<<"Linf\t K"<<endl;
+	}
+	iter++;
+	ofstream ofs("refpar.mcmc",ios::app);
+	ofs<< Linf << "\t" << K << endl;
