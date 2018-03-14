@@ -10,7 +10,6 @@ PARAMETER_SECTION
   init_number t0;
   init_number logSigma;
   sdreport_number sigma;
-  sdreport_vector Lpred(1,nobs);
   number RSS;
   objective_function_value nll;
 

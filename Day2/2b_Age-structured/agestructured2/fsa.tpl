@@ -44,7 +44,7 @@ PROCEDURE_SECTION
   logFAextend.initialize();
   logFAextend(minAge,maxAge-3)=logFA;  
 
-  F=outer_prod(exp(logFAextend),exp(logFY));  
+  F=outer_prod(exp(logFAextend),exp(logFY));
 
   logN.colfill(minYear,logN1Y);
   for(int y=minYear+1; y<=maxYear; ++y){
