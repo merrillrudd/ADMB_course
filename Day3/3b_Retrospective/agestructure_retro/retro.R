@@ -86,7 +86,7 @@ for(i in 1:length(retro)){
 		lines(Fish[[i]], col=col)
 	}
 
-	## plot of recruitment without removing any years of data
+	## set up plot
 	plot(x=1,y=1,type="n", xlim=c(0,length(Rec[[1]])), ylim=c(0,max(Rec[[1]])*1.5), cex.axis=1.5, xaxt="n", las=2)
 	mtext(side=2, "Recruitment", line=3)
 
@@ -96,7 +96,7 @@ for(i in 1:length(retro)){
 		lines(Rec[[i]], col=col)
 	}
 
-	## plot of vulnerable biomass without removing any years of data
+	## set up plots
 	plot(x=1,y=1,type="n", xlim=c(0,length(VB[[1]])), ylim=c(0, max(VB[[1]])*1.5), cex.axis=1.5, xaxt="n", las=2)
 	mtext(side=2, "Vulnerable biomass", line=3)
 	mtext(side=1, "Year", line=3)
