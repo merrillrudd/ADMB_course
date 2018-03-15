@@ -1,4 +1,4 @@
-setwd("C:\\merrill\\ADMB_course\\Day3\\3a_Simulation\\agestructure_sim2")
+setwd("C:\\merrill\\ADMB_course\\Day3\\3a_Simulation\\agestructure_sim1")
 
 library(R2admb)
 
@@ -18,10 +18,16 @@ run.Simulation=function(N=10)
 
 }
 compile_admb("SCA")
-run.Simulation(10)
+run.Simulation(50)
 
-tvalues=c(12000,10,12000,0.5,2,0.75)
+## ro= initial recruitment
+## cr= recruitment compensation ratio
+## rbar= average recruitment over time series
+## fbar= average fishing mortality over time seires
+## ahat= age at 50% selectivity
+## ghat= shape of logistic selectivity curve
 names=c("ro","cr","rbar","fbar","ahat","ghat")
+tvalues=c(12000,10,12000,0.5,2,0.75)
 trtheta=cbind(exp(theta[,1:4]),theta[,5:6])
 bias=trtheta*0
 for(i in 1:6)
@@ -30,3 +36,4 @@ for(i in 1:6)
 }
     
 boxplot(bias,names=names)
+abline(h=0, col="red")

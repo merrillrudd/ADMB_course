@@ -14,6 +14,7 @@ DATA_SECTION
 		sim=0;
 		rseed=0;
 		int on,opt;
+                // create simulation option as an argument in command line
 		if((on=option_match(ad_comm::argc,ad_comm::argv,"-sim",opt))>-1)
 		{
 			sim=1;
