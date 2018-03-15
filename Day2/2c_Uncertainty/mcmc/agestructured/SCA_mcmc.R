@@ -7,9 +7,10 @@ library(R2admb)
 
 compile_admb("SCA")
 
-nsamp <- 10000
-nsave <- 10
+nsamp <- 50000
+nsave <- 50
 run_admb("SCA", extra.args=paste("-mcmc", nsamp, "-mcsave", nsave))
+
 run_admb("SCA", extra.args="-mceval")
 
 chains <- read.table("refpar.mcmc", header=TRUE)
@@ -24,3 +25,14 @@ for(i in 1:ncol(chains)){
 	plot(chains[,1], xlab="Sample", ylab=colnames(chains)[i])
 }
 
+nburn <- 0.5
+chain_new <- chains[-c(1:(nburn*nrow(chains))),]
+par(mfrow=c(3,2))
+for(i in 1:ncol(chain_new)){
+	acf(chain_new[,i])
+}
+
+par(mfrow=c(3,2))
+for(i in 1:ncol(chain_new)){
+	plot(chain_new[,1], xlab="Sample", ylab=colnames(chains)[i])
+}

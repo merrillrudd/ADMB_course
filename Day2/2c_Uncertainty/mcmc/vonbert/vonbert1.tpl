@@ -36,9 +36,9 @@ PROCEDURE_SECTION
 FUNCTION mcmc_output
 	if(iter==0)
 	{
-		ofstream ofs("refpar.mcmc");
-		ofs<<"Linf\t K"<<endl;
+		ofstream myfile("refpar.mcmc");
+		myfile<<"Linf\t K"<<endl;
 	}
 	iter++;
-	ofstream ofs("refpar.mcmc",ios::app);
-	ofs<< Linf << "\t" << K << endl;
+	ofstream myfile("refpar.mcmc",ios::app);
+	myfile<< Linf << "\t" << K << endl;

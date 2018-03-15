@@ -5,6 +5,10 @@ setwd(project_dir)
 ### read in results from report file using code in tools.R
 source(file.path(wd, "tools.R"))
 
+library(R2admb)
+compile_admb("AS1")
+run_admb("AS1", extra.args="-lprof")
+
 ## read in likelihood profile
 prof <- readMat(string="Profile likelihood", file="logq_pro.plt", nrow=74)
 
