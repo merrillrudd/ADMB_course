@@ -94,6 +94,14 @@ PRELIMINARY_CALCS_SECTION
  // run simulation mode
  if(sim){
    run_simulation();
+
+  logN1 = 1;
+  logR = 1;
+  Sel50 = 3;
+  Sel95 = 4;
+  logF = 1;
+  logq = log(0.05);
+   
  }
 
  

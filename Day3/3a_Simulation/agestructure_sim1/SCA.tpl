@@ -19,12 +19,17 @@ DATA_SECTION
 		{
 			sim=1;
 			rseed=atoi(ad_comm::argv[on+1]);
+                        // equivalent to -mcmc 1000
+                        // -sim 123
 		}
 	END_CALCS
 
+        // automatically reading in SCA.dat (same name as TPL.dat)
+        // only reading in names of alternate data files to read from
 	init_adstring datafile;
 	init_adstring ctlfile;
-	//change to the new data file
+        
+	//change to read from the new data file
 	!!ad_comm::change_datafile_name(datafile);
 	//for mcmc stuff
 	init_int syr;//first year
@@ -46,7 +51,9 @@ DATA_SECTION
 	init_number iahat;// inital guess for age at 50% vulberability to gear
 	init_number ighat;//inital guess at how vunerability changes with age
 	init_int eof;
-	int iter;
+
+        // flag for writing MCMC parameter vectors to "refpar.mcmc"
+        int iter;
 	!!iter=0;
 
 	LOCAL_CALCS
@@ -76,18 +83,19 @@ DATA_SECTION
 		//fa=elem_prod(wa,fa);
 		fa=elem_prod(wa,plogis(age,log(3.)/vbk,0.1*log(3.)/vbk));
 	END_CALCS
-	//load in data for simulations
+        
+	//load in data for simulations- variation terms, true values
 	!!ad_comm::change_datafile_name(ctlfile);
-	init_number simsig;
+	init_number simsig; // error terms
 	init_number simtau;
-	init_number simqo;
+	init_number simqo; // true catchability coefficient
 	init_number simao;
-	init_number simro;
-	init_number simcr;
-	init_number simrbar;
-	init_number simahat;
-	init_number simghat;
-	init_vector simF(syr,eyr);
+	init_number simro; // true initial recruitment
+	init_number simcr; // true recruitment compensation ratio
+	init_number simrbar; // average recruitment over the time period
+	init_number simahat; // age at 50% selectivity
+	init_number simghat; // age at 95% selectivity
+	init_vector simF(syr,eyr); // true fishing mortality time series
 	init_int eofc;
 	LOCAL_CALCS
 		if(eofc!=999)
@@ -266,35 +274,50 @@ FUNCTION forecast
 FUNCTION run_data_simulation
 	random_number_generator rng(rseed);//create the random number generator object
 	dmatrix C(syr,eyr,1,nage); //Catch at age
-	dvector tmp(syr-nage,eyr);//anomalies
-	dvector eps(syr,eyr);//anomalies
+	dvector tmp(syr-nage,eyr);//recruitment anomalies
+	dvector eps(syr,eyr);//observation error anomalies
 	dvector simqt(syr,eyr);//catchability over time
+
+        // fill process and observation error
 	tmp.fill_randn(rng);//fill with standard random normal(0,1) 
 	eps.fill_randn(rng);
+
+        // calculate the process and observation error
 	wt=tmp*simsig;//recruitment anomalies 
 	eps*=simtau;//observation anomlaies
+
+        // setting up the true recruitment over time
 	log_ro=log(simro);//simulation assumes B-H recruitment
 	log_cr=log(simcr);
 	log_rbar=log(simrbar);
-	ahat=simahat;//selectivity
-	ghat=simghat;
 	ro=mfexp(log_ro);//back transform
 	cr=mfexp(log_cr);
 	rbar=mfexp(log_rbar);
+        
+ 
+        // starting to set up the age-structured model
 	dvector lxo=pow(mfexp(-m),age-1.);//unfished survivoarship so simulation is starting at unfished 
 	lxo(nage)/=(1.-mfexp(-m));//plus group
+
+        // calculating B-H recruitment 
 	double phieo=lxo*fa;//eggs per recruit
 	double phibo=lxo*wa;//biomass per recruit
 	double Bo=value(ro)*phibo;//Initial biomass
 	so=cr/phieo;//B-H alpha
 	beta=(cr-1.)/(ro*phieo);//B-H Beta
-	//selectivity
+        
+        // setting up selectivity over time
+	ahat=simahat;//selectivity
+	ghat=simghat;
+    	//selectivity
 	va=plogis(age,ahat,ghat);//logistic selectivity
+        
 	//Make some fish
 	//initial numbers
 	Nt(syr,1)=mfexp(log_rbar+wt(syr-1));//inital age 1 based on r_bar
-	for(int j=2;j<=nage;j++)Nt(syr,j)=mfexp(log_rbar+wt(syr-j))*lxo(j);//inital number at age based on r_bar
-	ft=simF;//F time series from control
+	for(int j=2;j<=nage;j++) Nt(syr,j)=mfexp(log_rbar+wt(syr-j))*lxo(j);//inital number at age based on r_bar
+
+        ft=simF;//F time series from control
 	for(int i=syr;i<=eyr;i++)
 	{
 		dvector ba=value(elem_prod(Nt(i),wa));//biomass at age 
@@ -308,14 +331,23 @@ FUNCTION run_data_simulation
 		dvector zttmp=value(Zt(i));//cfreate a temp vector for Z because Z is dvar_matrix and operations below are on dvectors
 		C(i)=elem_prod(elem_div(value(ft(i)*va),zttmp),elem_prod(1.-mfexp(-zttmp),value(Nt(i))));//Baranov catch equations
 		pat(i)=rmvlogistic(C(i)(1,nage),0.3,rseed+i);//samples proprtions at age from random multivariate logistic
-
 	}
-	ct=C*wa;// create catch ate age data
-	dvar_vector wbar(syr,eyr);//create a mean weight vector just in case
+        bt=Nt*elem_prod(wa,va); //biomass at age
+        // END OF TRUE POPULATION
+
+        // observation model -- sample from our true population, creating data
+        // catch in biomass over time
+	ct=C*wa;// create catch ate age data (catch by weight) 
+
+        // mean weight in case you are interested
+        dvar_vector wbar(syr,eyr);//create a mean weight vector just in case
 	for (int i=syr;i<=eyr;i++) wbar(i)=ct(i)/sum(C(i)); // mean weight as biomass/numbers
-	bt=Nt*elem_prod(wa,va); //biomass at age
+
+        // simulated catch per unit effort
 	yt=elem_prod(simqt,value(elem_prod(bt(syr,eyr),mfexp(eps))));//cpue is measuring vulnerable biomass
-	wt=0;
+
+        // process error term reset to zero after simulating hypothetical population with recruitment process error
+        wt=0;
 	//use this code to create data files for more basic methods.
 	/*
 	ofstream ofs("DD.dat");

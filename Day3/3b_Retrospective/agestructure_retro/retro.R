@@ -31,6 +31,7 @@ file.exists(exe)
 
 setwd(proj_dir)
 
+## loop over retrospective years
 retro <- 0:10
 rundir <- file.path(proj_dir, "run_retro")
 dir.create("run_retro", showWarnings=FALSE)
@@ -69,24 +70,39 @@ for(i in 1:length(retro)){
 		VB[[i]] <- readVec("VulBio", paste0(name, ".rep"))
 	}
 	
-	col_vec <- brewer.pal(length(retro)-1, "RdBu")
+	## colors
+	col_vec <- rev(brewer.pal(length(retro)-1, "Reds"))
+	
+	## figure margins
 	par(mfrow=c(3,1), mar=c(0,0,0,0), omi=c(1,1,0.5,0.2))
+
+	## set up plot
 	plot(x=1,y=1,type="n", xlim=c(0,length(Fish[[1]])), ylim=c(0,max(Fish[[1]])*1.5), cex.axis=1.5, xaxt="n", las=2)
 	mtext(side=2, "Fishing mortality", line=3)
+
+	## add lines for each retrospective year 
 	for(i in 1:length(retro)){
 		col <- ifelse(i==1, "black", col_vec[i])
 		lines(Fish[[i]], col=col)
 	}
+
+	## plot of recruitment without removing any years of data
 	plot(x=1,y=1,type="n", xlim=c(0,length(Rec[[1]])), ylim=c(0,max(Rec[[1]])*1.5), cex.axis=1.5, xaxt="n", las=2)
 	mtext(side=2, "Recruitment", line=3)
+
+	## add lines for each retropsective year
 	for(i in 1:length(retro)){
 		col <- ifelse(i==1, "black", col_vec[i])
 		lines(Rec[[i]], col=col)
 	}
+
+	## plot of vulnerable biomass without removing any years of data
 	plot(x=1,y=1,type="n", xlim=c(0,length(VB[[1]])), ylim=c(0, max(VB[[1]])*1.5), cex.axis=1.5, xaxt="n", las=2)
 	mtext(side=2, "Vulnerable biomass", line=3)
 	mtext(side=1, "Year", line=3)
 	axis(1, cex.axis=1.5)
+
+	## add lines for each retrospective year
 	for(i in 1:length(retro)){
 		col <- ifelse(i==1, "black", col_vec[i])
 		lines(VB[[i]], col=col)
