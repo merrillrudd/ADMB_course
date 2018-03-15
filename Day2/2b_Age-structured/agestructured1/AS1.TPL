@@ -104,8 +104,14 @@ FUNCTION Numbers
  // Project the whole N matrix
  for (Year=1;Year<Nyear;Year++){
   for (Age=0;Age<Nage;Age++){
-   N(Year+1,Age+1) = N(Year,Age) * mfexp(-Z(Year,Age));
+   if(Age<(Nage-1)) N(Year+1,Age+1) = N(Year,Age) * mfexp(-Z(Year,Age));
+   if(Age==(Nage-1)) N(Year+1,Age+1) = N(Year,Age) * mfexp(-Z(Year,Age)) +
+                                     N(Year,Age+1) * mfexp(-Z(Year,Age+1));
   }
+//  for (Age=0;Age<Nage;Age++){
+//   N(Year+1,Age+1) = N(Year,Age) * mfexp(-Z(Year,Age));
+//  }
+//  N(Year+1,Nage) += N(Year,Nage) * mfexp(-Z(Year,Nage));
  }
 
 FUNCTION Predict_Observations

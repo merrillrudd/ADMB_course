@@ -21,10 +21,10 @@ DATA_SECTION
   !! logSurvey=log(survey);
 
 PARAMETER_SECTION
-  init_vector logN1Y(minAge,maxAge)
-  init_vector logN1A(minYear+1,maxYear)
-  init_vector logFY(minYear,maxYear)
-  init_vector logFA(minAge,maxAge-3)
+  init_vector logN1Y(minAge,maxAge)       // number of individuals year 1
+  init_vector logN1A(minYear+1,maxYear)   // number of individauls first age
+  init_vector logFY(minYear,maxYear)      // fishing mortality each year
+  init_vector logFA(minAge,maxAge-3)      // fishing mortality for most ages
   init_number logVarLogCatch
   init_vector logQ(minAgeS,maxAgeS)
   init_number logVarLogSurvey
@@ -45,7 +45,13 @@ PROCEDURE_SECTION
 
   F=outer_prod(exp(logFAextend),exp(logFY));
 
+  // initialize N matrix for first year
   logN.colfill(minYear,logN1Y);
+  // for(int a=minAge;a<=maxAge;a++){
+  //   logN(a,minYear) = logN1Y(a);
+  // }
+
+
   for(int y=minYear+1; y<=maxYear; ++y){
     logN(minAge,y)=logN1A(y);
     for(int a=minAge+1; a<=maxAge; ++a){
@@ -66,5 +72,11 @@ PROCEDURE_SECTION
       nll+=0.5*(log(2.0*M_PI*ss)+square(logSurvey(a,y)-predLogSurvey(a,y))/ss);
     }
   }
+
+   // for(int y=minYear;y<=maxYear;y++){
+   //    for(int a=minAge;a<=maxAge;a++)
+   //         ssb(y) += exp(logN(a,y)) * propMature(a,y) * weight(a,y);
+   //  }
+   // }
   ssb=colsum(elem_prod(elem_prod(exp(logN),propMature),stockMeanWeight));
 

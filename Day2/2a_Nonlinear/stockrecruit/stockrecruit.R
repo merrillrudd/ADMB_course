@@ -38,7 +38,7 @@ lines(x=Sobs, y=Rpred_est, col=gray(0.3), lwd=2)
 library(RColorBrewer)
 ## add models to compare
 
-modnames <- c("bevholt1", "bevholt2", "bevholt3")
+modnames <- c("bevholt1", "bevholt2")
 Rpred_est <- Rpred_sd <- Rpred_lcl <- Rpred_ucl <- nll <- npar <- aic <- list()
 for(i in 1:length(modnames)){
 	## predicted values
