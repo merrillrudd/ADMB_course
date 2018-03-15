@@ -7,8 +7,8 @@ library(R2admb)
 
 compile_admb("SCA")
 
-nsamp <- 50000
-nsave <- 50
+nsamp <- 10000
+nsave <- 10
 run_admb("SCA", extra.args=paste("-mcmc", nsamp, "-mcsave", nsave))
 
 run_admb("SCA", extra.args="-mceval")

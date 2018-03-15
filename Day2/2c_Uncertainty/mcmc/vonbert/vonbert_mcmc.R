@@ -5,6 +5,7 @@ setwd(project_dir)
 library(R2admb)
 
 compile_admb("vonbert1")
+run_admb("vonbert1")
 
 nsamp <- 10000
 nsave <- 10
