@@ -64,6 +64,8 @@ DATA_SECTION
       if ( (on=option_match(ad_comm::argc,ad_comm::argv,"-sim")) > -1 )
       {
         b_simulation_flag = 1;
+        //from Merrill: idea for turning on global_parfile flag to look at pin file to fix parameter values for simulation (would need to declare global_parfile and set to zero when declaring b_simulation_flag)
+        //global_parfile = 1;
         rseed = atoi(ad_comm::argv[on+1]);
       }
 
@@ -350,179 +352,183 @@ DATA_SECTION
   int nf;
   !! nf = 0;
 
-// // |---------------------------------------------------------------------------|
-// // | VARIABLES FOR STORING SIMULATED VALUES
-// // |---------------------------------------------------------------------------|
-//   vector sim_spawners(rec_syr,mod_nyr+1);
-//   vector sim_recruits(rec_syr,mod_nyr+1);
+// |---------------------------------------------------------------------------|
+// | VARIABLES FOR STORING SIMULATED VALUES
+// |---------------------------------------------------------------------------|
+  vector sim_spawners(rec_syr,mod_nyr+1);
+  vector sim_recruits(rec_syr,mod_nyr+1);
 
-// INITIALIZATION_SECTION
-//   theta theta_ival;
+INITIALIZATION_SECTION
+  theta theta_ival;
 
 
 PARAMETER_SECTION
 
- objective_function_value nll_total;
-// // |---------------------------------------------------------------------------|
-// // | POPULATION PARAMETERS
-// // |---------------------------------------------------------------------------|
-// // | - theta(1) -> log natural mortality
-// // | - theta(2) -> log initial average age-3 recruitment for ages 4-9+ in dat_styr
-// // | - theta(3) -> log average age-3 recruitment from dat_styr to dat_endyr
-// // | - theta(4) -> log of unfished recruitment.
-// // | - theta(5) -> log of recruitment compensation (reck > 1.0)
-// // | - theta(6) -> log of simga R
-//   init_bounded_number_vector theta(1,n_theta,theta_lb,theta_ub,theta_phz);
-//   number log_natural_mortality;
-//   number log_rinit;
-//   number log_rbar;
-//   number log_ro;
-//   number log_reck;
-//   number log_sigma_r;
-//   init_bounded_dev_vector log_rinit_devs(sage+1,nage,-15.0,15.0,2);
-//   init_bounded_dev_vector log_rbar_devs(mod_syr,mod_nyr+1,-15.0,15.0,2);
-//   LOCAL_CALCS
-//     if( global_parfile ) {
-//       theta_ival = value(theta);
-//     }
-//   END_CALCS
+// |---------------------------------------------------------------------------|
+// | POPULATION PARAMETERS
+// |---------------------------------------------------------------------------|
+// | - theta(1) -> log natural mortality
+// | - theta(2) -> log initial average age-3 recruitment for ages 4-9+ in dat_styr
+// | - theta(3) -> log average age-3 recruitment from dat_styr to dat_endyr
+// | - theta(4) -> log of unfished recruitment.
+// | - theta(5) -> log of recruitment compensation (reck > 1.0)
+// | - theta(6) -> log of simga R
+ // init_bounded_number_vector allows us to set lower and upper bounds and phases for each of the 6 parameters (n_theta) separately (not the same for each parameter)
+  init_bounded_number_vector theta(1,n_theta,theta_lb,theta_ub,theta_phz);
+  //pulling out each parameter (initial values set in INITIALIZATION_SECTION)
+  number log_natural_mortality;
+  number log_rinit;
+  number log_rbar;
+  number log_ro;
+  number log_reck;
+  number log_sigma_r;
+  //// used to generate process error in the simulation model but then estimated in the assessment model
+  // estimated deviations in initial numbers at age in the first year
+  init_bounded_dev_vector log_rinit_devs(sage+1,nage,-15.0,15.0,2);
+  // recruitment deviations each year
+  init_bounded_dev_vector log_rbar_devs(mod_syr,mod_nyr+1,-15.0,15.0,2);
+ LOCAL_CALCS
+    // global_parfile flag = using the pin file for setting simulation parameter values
+    // I'm assuming value() sets the values for theta as values and does not let them be estimated in simulation mode
+    // to run the simulation with the pin file, create a pin file based on the order/structure of the PARAMETER_SECTION and figure out how to turn on global_parfile flag
+    if( global_parfile ) {
+      theta_ival = value(theta);
+    }
+ END_CALCS
   
 
-// // |---------------------------------------------------------------------------|
-// // | MATURITY PARAMETERS
-// // |---------------------------------------------------------------------------|
-// // | TO BE DEPRECATED
-// // | - mat_params[1] -> Age at 50% maturity
-// // | - mat_params[2] -> Slope at 50% maturity
-//   init_bounded_vector_vector mat_params(1,nMatBlocks,1,2,0,100,mat_phz);
-//   //init_bounded_matrix mat_params(1,nMatBlocks,1,2,0,10,mat_phz);
-//   matrix mat(mod_syr,mod_nyr,sage,nage);
-//   LOCAL_CALCS
-//     //cout<<"Good to here"<<endl;
-//     //cout<<mat_params(1)<<endl;
-//     if( !global_parfile ) {
-//       for(int h = 1; h <= nMatBlocks; h++){
-//         mat_params(h,1) = mat_a50(h);
-//         mat_params(h,2) = mat_a95(h);       
-//       }
-//     }
-//     //cout<<mat_params(1)<<endl;
-    
-//   END_CALCS
+// |---------------------------------------------------------------------------|
+// | MATURITY PARAMETERS
+// |---------------------------------------------------------------------------|
+// | TO BE DEPRECATED
+// | - mat_params[1] -> Age at 50% maturity
+// | - mat_params[2] -> Slope at 50% maturity
+  // set bounds for each separate vector for each vector (instead of each number)
+  init_bounded_vector_vector mat_params(1,nMatBlocks,1,2,0,100,mat_phz);
+  //init_bounded_matrix mat_params(1,nMatBlocks,1,2,0,10,mat_phz);
+  matrix mat(mod_syr,mod_nyr,sage,nage);
+ LOCAL_CALCS
+    // cout<<mat_params(1)<<endl;
+    // if not using a global_parfile for simulation, use estimated parameters
+    if( !global_parfile ) {
+      for(int h = 1; h <= nMatBlocks; h++){
+        mat_params(h,1) = mat_a50(h);
+        mat_params(h,2) = mat_a95(h);       
+      }
+    }
+    // cout<<mat_params(1)<<endl;
+ END_CALCS
 
-// // |---------------------------------------------------------------------------|
-// // | NATURAL MORTALITY PARAMETERS
-// // |---------------------------------------------------------------------------|
-// // | - log_m_devs   -> deviations in natural mortality for each block.
-// // | - Mij          -> Array for natural mortality rate by year and age.
-//   init_bounded_dev_vector log_m_devs(1,nMortBlocks,-15.0,15.0,mort_dev_phz);
-//   matrix Mij(mod_syr,mod_nyr,sage,nage);
+// |---------------------------------------------------------------------------|
+// | NATURAL MORTALITY PARAMETERS
+// |---------------------------------------------------------------------------|
+// | - log_m_devs   -> deviations in natural mortality for each block.
+  init_bounded_dev_vector log_m_devs(1,nMortBlocks,-15.0,15.0,mort_dev_phz);
+// | - Mij          -> Array for natural mortality rate by year and age.
+  matrix Mij(mod_syr,mod_nyr,sage,nage);
 
-// // |---------------------------------------------------------------------------|
-// // | SELECTIVITY PARAMETERS
-// // |---------------------------------------------------------------------------|
-// // | - log_slx_pars » parameters for selectivity models (ragged object).
-//   init_bounded_matrix_vector log_slx_pars(1,nSlxBlks,1,nslx_rows,1,nslx_cols,-25,25,nslx_phz);
-//   matrix log_slx(mod_syr,mod_nyr,sage,nage);
-//   LOCAL_CALCS
-//    if( ! global_parfile ){
-//      for(int h = 1; h <= nSlxBlks; h++){
-//        switch(nSelType(h)){
-//          case 1: //logistic
-//            log_slx_pars(h,1,1) = log(selex_cont(h,3));
-//            log_slx_pars(h,1,2) = log(selex_cont(h,4));
-//          break; 
-//        }
-//      } 
-//    }
-//   END_CALCS
+// |---------------------------------------------------------------------------|
+// | SELECTIVITY PARAMETERS
+// |---------------------------------------------------------------------------|
+// | - log_slx_pars » parameters for selectivity models (ragged object).
+  init_bounded_matrix_vector log_slx_pars(1,nSlxBlks,1,nslx_rows,1,nslx_cols,-25,25,nslx_phz);
+  matrix log_slx(mod_syr,mod_nyr,sage,nage);
+ LOCAL_CALCS
+   if( ! global_parfile ){
+     for(int h = 1; h <= nSlxBlks; h++){
+       switch(nSelType(h)){
+         case 1: //logistic
+           log_slx_pars(h,1,1) = log(selex_cont(h,3));
+           log_slx_pars(h,1,2) = log(selex_cont(h,4));
+         break; 
+       }
+     } 
+   }
+ END_CALCS
 
-// // |---------------------------------------------------------------------------|
-// // | FISHING MORTALITY RATE PARAMETERS
-// // |---------------------------------------------------------------------------|
-// // |
-//   !! int phz; phz = dMiscCont(2)==0?-1:1;
-//   init_bounded_vector log_ft_pars(mod_syr,mod_nyr,-30.,3.0,phz);
-//   LOCAL_CALCS
-//     if(b_simulation_flag && ! global_parfile) log_ft_pars = log(0.2);
-//   END_CALCS
+// |---------------------------------------------------------------------------|
+// | FISHING MORTALITY RATE PARAMETERS
+// |---------------------------------------------------------------------------|
+// |
+  !! int phz; phz = dMiscCont(2)==0?-1:1;
+  // annual fishing mortality in log space
+  init_bounded_vector log_ft_pars(mod_syr,mod_nyr,-30.,3.0,phz);
+ LOCAL_CALCS
+    // if this is a simulation and we are NOT using the PIN file to set true values (here, true fishing mortality over time), then set logF to log(0.2) for every year
+    if(b_simulation_flag && ! global_parfile) log_ft_pars = log(0.2);
+ END_CALCS
 
-// // |---------------------------------------------------------------------------|
-// // | VARIABLES
-// // |---------------------------------------------------------------------------|
-// // |- fore_sb spawning biomass
-// // |- fore_sb vulnerable biomass
-// // |- ghl guidline harvest level
-//   number ro;  
-//   number reck;
-//   number so;  
-//   number beta;
-//   number fore_sb;   
-//   number fore_vb;   
-//   number ghl;       
+// |---------------------------------------------------------------------------|
+// | VARIABLES
+// |---------------------------------------------------------------------------|
 
 
-// // |---------------------------------------------------------------------------|
-// // | VECTORS
-// // |---------------------------------------------------------------------------|
-// // | - ssb      » spawning stock biomass at the time of spawning.
-// // | - recruits » vector of sage recruits predicted by S-R curve.
-// // | - spawners » vector of ssb indexed by brood year.
-// // | - resd_rec » vector of residual process error (log-normal).
-//   vector ssb(mod_syr,mod_nyr);
-//   vector recruits(rec_syr,mod_nyr+1);
-//   vector spawners(rec_syr,mod_nyr+1);
-//   vector resd_rec(rec_syr,mod_nyr+1);
+  number ro;  // equilibrium recruitment
+  number reck;  // recruitment compensation ratio
+  number so;   
+  number beta;
+  number fore_sb; //spawning biomass
+  number fore_vb;  //vulnerable biomass
+  number ghl;   // ghl guidline harvest level  
 
-//   vector pred_egg_dep(mod_syr,mod_nyr);
-//   vector resd_egg_dep(mod_syr,mod_nyr);
 
-//   vector pred_mileday(mod_syr,mod_nyr);
-//   vector resd_mileday(mod_syr,mod_nyr);
+// |---------------------------------------------------------------------------|
+// | VECTORS
+// |---------------------------------------------------------------------------|
+  vector ssb(mod_syr,mod_nyr); // spawning stock biomass at the time of spawning.
+  vector recruits(rec_syr,mod_nyr+1); // vector of sage recruits predicted by S-R curve.
+  vector spawners(rec_syr,mod_nyr+1); //vector of ssb indexed by brood year.
+  vector resd_rec(rec_syr,mod_nyr+1); //vector of residual process error (log-normal).
 
-//   vector pred_catch(mod_syr,mod_nyr);
-//   vector resd_catch(mod_syr,mod_nyr);
+  vector pred_egg_dep(mod_syr,mod_nyr);
+  vector resd_egg_dep(mod_syr,mod_nyr);
 
-// // |---------------------------------------------------------------------------|
-// // | MATRIXES
-// // |---------------------------------------------------------------------------|
-// // | - Nij      » numbers-at-age N(syr,nyr,sage,nage)
-// // | - Oij      » mature numbers-at-age O(syr,nyr,sage,nage)
-// // | - Pij      » numbers-at-age P(syr,nyr,sage,nage) post harvest.
-// // | - Sij      » selectivity-at-age 
-// // | - Qij      » vulnerable proportions-at-age
-// // | - Cij      » predicted catch-at-age in numbers.
-//   matrix Nij(mod_syr,mod_nyr+1,sage,nage);
-//   matrix Oij(mod_syr,mod_nyr+1,sage,nage);
-//   matrix Pij(mod_syr,mod_nyr+1,sage,nage);
-//   matrix Sij(mod_syr,mod_nyr+1,sage,nage);
-//   matrix Qij(mod_syr,mod_nyr+1,sage,nage);
-//   matrix Cij(mod_syr,mod_nyr+1,sage,nage);
-//   matrix Fij(mod_syr,mod_nyr+1,sage,nage);
+  vector pred_mileday(mod_syr,mod_nyr);
+  vector resd_mileday(mod_syr,mod_nyr);
 
-//   matrix pred_cm_comp(mod_syr,mod_nyr,sage,nage);
-//   matrix resd_cm_comp(mod_syr,mod_nyr,sage,nage);
-//   matrix pred_sp_comp(mod_syr,mod_nyr,sage,nage);
-//   matrix resd_sp_comp(mod_syr,mod_nyr,sage,nage);
+  vector pred_catch(mod_syr,mod_nyr);
+  vector resd_catch(mod_syr,mod_nyr);
 
-// // |---------------------------------------------------------------------------|
-// // | OBJECTIVE FUNCTION VALUE
-// // |---------------------------------------------------------------------------|
-//   vector nll(1,7);
-//   objective_function_value nll_total;
+// |---------------------------------------------------------------------------|
+// | MATRIXES
+// |---------------------------------------------------------------------------|
+  matrix Nij(mod_syr,mod_nyr+1,sage,nage); // numbers-at-age N(syr,nyr,sage,nage)
+  matrix Oij(mod_syr,mod_nyr+1,sage,nage);// mature numbers-at-age O(syr,nyr,sage,nage)
+  matrix Pij(mod_syr,mod_nyr+1,sage,nage); // numbers-at-age P(syr,nyr,sage,nage) post harvest.
+  matrix Sij(mod_syr,mod_nyr+1,sage,nage); // selectivity-at-age 
+  matrix Qij(mod_syr,mod_nyr+1,sage,nage); // vulnerable proportions-at-age
+  matrix Cij(mod_syr,mod_nyr+1,sage,nage); // predicted catch-at-age in numbers.
+  matrix Fij(mod_syr,mod_nyr+1,sage,nage); // predicted fishing mortality
 
-//   number fpen;
-//   sdreport_number sd_terminal_ssb;
-//   sdreport_number sd_forecast_ssb;
-//   sdreport_number sd_projected_ssb;
-//   sdreport_vector sd_ssb(mod_syr,mod_nyr);
+  matrix pred_cm_comp(mod_syr,mod_nyr,sage,nage);  // predicted commercial compositinos
 
+  matrix resd_cm_comp(mod_syr,mod_nyr,sage,nage); // residual commercial compositions
+  matrix pred_sp_comp(mod_syr,mod_nyr,sage,nage); // predicted spawning composition
+  matrix resd_sp_comp(mod_syr,mod_nyr,sage,nage); // residual spawning composition
+
+// |---------------------------------------------------------------------------|
+// | OBJECTIVE FUNCTION VALUE
+// |---------------------------------------------------------------------------|
+  vector nll(1,7); // likelihood components
+  objective_function_value nll_total; // sum of likelihood components
+
+
+  number fpen; // penalty for the objective function to prevent catch from being greater than population abundance
+
+  // calculate standard errors for components of spawning stock biomass
+  sdreport_number sd_terminal_ssb;
+  sdreport_number sd_forecast_ssb;
+  sdreport_number sd_projected_ssb;
+  sdreport_vector sd_ssb(mod_syr,mod_nyr);
+
+  !! cout << fpen << endl; 
 
 // PRELIMINARY_CALCS_SECTION
 
 //   /* 
 //    * SIMULATION MODEL SWITCH
 //    */
+//   // should this be >0 instead of >=0? It looks like simulation is turned off if b_simulation_flag is 0 (based on first few lines of .TPL) but this would turn on simulation if b_simulation_flag & rseed=0 (which are the defaults)
 //   if( b_simulation_flag && rseed >= 0) {
 //     cout<<"|--------------------------|"<<endl;
 //     cout<<"| RUNNING SIMULATION MODEL |"<<endl;
@@ -531,28 +537,32 @@ PARAMETER_SECTION
 //     char type;
 //     do
 //     {
+//         // showing you values for theta
+//         // asking to continue based on simulation values
 //         cout<<"Theta \n"<<theta<<endl;
 //         cout<<"| Continue? [y]es or [n]o "<<endl;
 //         cin >> type;
 //     }
 //     while( !cin.fail() && type!='y' && type!='n' );
+//     // run simulation model if you want to continue based on the parameter values printed to screen
 //     if( type =='y' ){
 //       runSimulationModel(rseed);
 //     } else {
+//       // exit if you don't want to run the model with the proposed values
 //       exit(1);
 //     }
 
 //   } else if ( b_simulation_flag && rseed < 0 ){
+//     // I think this is trying to turn off simulation flag and running the 'runSimulationModel' at initial values - perhaps just to check estimation vs. calculations based on initial values
 //     theta_ival = value(theta);
 //     runSimulationModel(rseed);
 //   }
 
 
 PROCEDURE_SECTION
-  nll_total = 1;
  
 // // |---------------------------------------------------------------------------|
-// // | RUN STOCK ASSEAAMENT MODEL ROUTINES
+// // | RUN STOCK ASSESSMENT MODEL ROUTINES
 // // |---------------------------------------------------------------------------|
 // // | PSUEDOCODE:
 // // | - initialize model parameters.
@@ -709,7 +719,7 @@ PROCEDURE_SECTION
 //   ofs<<ssb<<endl;
   
 // FUNCTION void runSimulationModel(const int& rseed)
-//   /*
+  
 //     PSUEDOCODE:
 //     1) initialize model parameters based on pin file, or control file.
 //     2) initialize maturity schedules for all block years.
@@ -720,7 +730,7 @@ PROCEDURE_SECTION
 //     7) update state variables conditioned on the observed catch data.
 //     8) calculate age-composition residuals and over-write input data in memory.
 //     9) calculate egg survey residuals and simulate fake survey.
-//   */
+  
 //   if(global_parfile) {
 //     cout<<"\nUsing pin file for simulation parameter values.\n"<<endl;
 //   }
@@ -738,7 +748,7 @@ PROCEDURE_SECTION
 //   calcSelectivity();
   
 //   // 4b) calculate fishing mortality.
-//   calcFishingMortalitiy();
+//   calcFishingMortality();
 
 //   // 5) generate random normal deviates for process errors:
 //   //    - log_m_devs
@@ -933,7 +943,7 @@ PROCEDURE_SECTION
 //   Sij.sub(mod_syr,mod_nyr) = mfexp(log_slx);
 
 
-// FUNCTION void calcFishingMortalitiy()
+// FUNCTION void calcFishingMortality()
 //   /**
 //     - Calculate Fishing mortality, and then Zij = Mij + Fij
 //     */
