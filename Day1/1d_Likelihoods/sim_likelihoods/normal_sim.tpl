@@ -1,10 +1,14 @@
 DATA_SECTION
-  vector X(1,1000);
+  vector X(1,10000);
+  vector Y(1,10000);
+  vector Z(1,10000);
 
-  !! random_number_generator rng(1234);
-  !! X.fill_randn(rng);
-  !! X *= 5.0;
-  !! X += 2.0;
+ LOCAL_CALCS
+    random_number_generator rng(1234);
+    X.fill_randn(rng);
+    Y = X * 5.0;
+    Z = Y + 2.0;
+ END_CALCS
 
 PARAMETER_SECTION
   init_number mu;
@@ -14,16 +18,20 @@ PARAMETER_SECTION
 
 PROCEDURE_SECTION
   sigma = exp(logSigma);
-  int N = X.indexmax() - X.indexmin() + 1;
+  int N = Z.indexmax() - Z.indexmin() + 1;
   dvariable ss = square(sigma);
-  nll = 0.5 * (N * log(2 + M_PI * ss) + sum(square(X - mu))/ss);
+  nll = 0.5 * (N * log(2 + M_PI * ss) + sum(square(Z - mu))/ss);
 
 REPORT_SECTION
-  report << "observed" << endl;
+  report << "random_numbers" << endl;
   report << X << endl;
+  report << "times5" << endl;
+  report << Y << endl;
+  report << "add2" << endl;
+  report << Z << endl;
   report << "mu" << endl;
   report << mu << endl;
   report << "sigma" << endl;
-  report << sigma << endl;
+  report << sigma << endl; 
   report << "nll" << endl;
   report << nll << endl;

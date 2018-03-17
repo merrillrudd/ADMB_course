@@ -1,8 +1,10 @@
 main_dir <- "C:\\merrill\\ADMB_course"
+source(file.path(main_dir, "tools.R"))
+
 proj_dir <- file.path(main_dir, "Day1", "1b_Simple", "simplest")
 setwd(proj_dir)
 
-source(file.path(main_dir, "tools.R"))
+
 
 ## use readVec function in tools.R file
 ## read from report file

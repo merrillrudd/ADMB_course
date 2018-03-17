@@ -19,3 +19,9 @@ FUNCTION dvar_vector a2p(const dvar_vector& a)
   p(dim) = 1 - sum(p(1,dim-1));
   return p;
 
+REPORT_SECTION
+  report << "predicted" << endl;
+  report << p << endl;
+  report << "observed" << endl;
+  report << X << endl; 
+
