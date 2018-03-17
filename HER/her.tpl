@@ -492,6 +492,7 @@ PARAMETER_SECTION
 // |---------------------------------------------------------------------------|
 // | MATRIXES
 // |---------------------------------------------------------------------------|
+  // +1 is for one year of forecast
   matrix Nij(mod_syr,mod_nyr+1,sage,nage); // numbers-at-age N(syr,nyr,sage,nage)
   matrix Oij(mod_syr,mod_nyr+1,sage,nage);// mature numbers-at-age O(syr,nyr,sage,nage)
   matrix Pij(mod_syr,mod_nyr+1,sage,nage); // numbers-at-age P(syr,nyr,sage,nage) post harvest.
@@ -509,9 +510,10 @@ PARAMETER_SECTION
 // |---------------------------------------------------------------------------|
 // | OBJECTIVE FUNCTION VALUE
 // |---------------------------------------------------------------------------|
-  vector nll(1,7); // likelihood components
+  // *FLAG* only 6 terms added, but 7th should be zero using .initialize()
+  vector nll(1,7); // likelihood components 
+  vector penll(1,4); // moved from declaring 'penll' as dvar_vector within PROCEDURE_SECTION to declaring within PARAMETER_SECTION
   objective_function_value nll_total; // sum of likelihood components
-
 
   number fpen; // penalty for the objective function to prevent catch from being greater than population abundance
 
@@ -521,822 +523,925 @@ PARAMETER_SECTION
   sdreport_number sd_projected_ssb;
   sdreport_vector sd_ssb(mod_syr,mod_nyr);
 
-  !! cout << fpen << endl; 
+PRELIMINARY_CALCS_SECTION
 
-// PRELIMINARY_CALCS_SECTION
-
-//   /* 
-//    * SIMULATION MODEL SWITCH
-//    */
-//   // should this be >0 instead of >=0? It looks like simulation is turned off if b_simulation_flag is 0 (based on first few lines of .TPL) but this would turn on simulation if b_simulation_flag & rseed=0 (which are the defaults)
-//   if( b_simulation_flag && rseed >= 0) {
-//     cout<<"|--------------------------|"<<endl;
-//     cout<<"| RUNNING SIMULATION MODEL |"<<endl;
-//     cout<<"|--------------------------|"<<endl;
+  /* 
+   * SIMULATION MODEL SWITCH
+   */
+  // should this be >0 instead of >=0? It looks like simulation is turned off if b_simulation_flag is 0 (based on first few lines of .TPL) but this would turn on simulation if b_simulation_flag & rseed=0 (which are the defaults)
+  if( b_simulation_flag && rseed >= 0) {
+    cout<<"|--------------------------|"<<endl;
+    cout<<"| RUNNING SIMULATION MODEL |"<<endl;
+    cout<<"|--------------------------|"<<endl;
     
-//     char type;
-//     do
-//     {
-//         // showing you values for theta
-//         // asking to continue based on simulation values
-//         cout<<"Theta \n"<<theta<<endl;
-//         cout<<"| Continue? [y]es or [n]o "<<endl;
-//         cin >> type;
-//     }
-//     while( !cin.fail() && type!='y' && type!='n' );
-//     // run simulation model if you want to continue based on the parameter values printed to screen
-//     if( type =='y' ){
-//       runSimulationModel(rseed);
-//     } else {
-//       // exit if you don't want to run the model with the proposed values
-//       exit(1);
-//     }
+    // *FLAG* comment out the following - unable to tell ADMB to continue via R2admb
+    // char type;
+    // do
+    // {
+    //     // showing you values for theta
+    //     // asking to continue based on simulation values
+    //     cout<<"Theta \n"<<theta<<endl;
+    //     cout<<"| Continue? [y]es or [n]o "<<endl;
+    //     cin >> type;
+    // }
+    // while( !cin.fail() && type!='y' && type!='n' );
+    // // run simulation model if you want to continue based on the parameter values printed to screen
+    // if( type =='y' ){
+    //   runSimulationModel(rseed);
+    // } else {
+    //   // exit if you don't want to run the model with the proposed values
+    //   exit(1);
+    // }
 
-//   } else if ( b_simulation_flag && rseed < 0 ){
-//     // I think this is trying to turn off simulation flag and running the 'runSimulationModel' at initial values - perhaps just to check estimation vs. calculations based on initial values
-//     theta_ival = value(theta);
-//     runSimulationModel(rseed);
-//   }
+  } else if ( b_simulation_flag && rseed < 0 ){
+    // I think this is trying to turn off simulation flag and running the 'runSimulationModel' at initial values - perhaps just to check estimation vs. calculations based on initial values
+    theta_ival = value(theta);
+    runSimulationModel(rseed);
+  }
 
 
 PROCEDURE_SECTION
  
+// |---------------------------------------------------------------------------|
+// | RUN STOCK ASSESSMENT MODEL ROUTINES
+// |---------------------------------------------------------------------------|
+// | PSUEDOCODE:
+// | - initialize model parameters.
+// | - initialize Maturity Schedule information.
+// | - get natural mortality schedules.
+// | - get fisheries selectivity schedules.
+// | - initialize State variables
+// | - update State variables:
+// |    - calculate spawning stock biomass
+// |    - calculate age-composition residuals
+// | - stock-recruitment relationship
+// | - observation models:
+// |    - calculate age-composition residuals
+// |    - calculate egg-deposition survey residuals
+// |    - calculate mile-days of milt residuals
+// |    - calculate catch residuals if model is conditioned on effort
+// | - calculate objective function value
+// | - TERMINAL PHASE:
+// |    - run forecast model
+// |    - save posterior samples from -mceval cmd line option
+// |---------------------------------------------------------------------------|
+  
+  initializeModelParameters();
+  if(DEBUG_FLAG) cout<<"--> Ok after initializeModelParameters      <--"<<endl;
+
+  initializeMaturitySchedules();
+  if(DEBUG_FLAG) cout<<"--> Ok after initializeMaturitySchedules    <--"<<endl;
+
+  calcNaturalMortality();
+  if(DEBUG_FLAG) cout<<"--> Ok after calcNaturalMortality           <--"<<endl;
+  
+  calcSelectivity();
+  if(DEBUG_FLAG) cout<<"--> Ok after calcSelectivity                <--"<<endl;
+  
+  if( dMiscCont(2) ) {
+    calcFishingMortality();
+    if(DEBUG_FLAG) cout<<"--> Ok after calcFishingMortality          <--"<<endl;  
+  }
+
+  initializeStateVariables();
+  if(DEBUG_FLAG) cout<<"--> Ok after initializeStateVariables       <--"<<endl;
+  
+  updateStateVariables();
+  if(DEBUG_FLAG) cout<<"--> Ok after updateStateVariables           <--"<<endl;
+  
+  calcSpawningStockRecruitment();
+  if(DEBUG_FLAG) cout<<"--> Ok after calcSpawningStockRecruitment   <--"<<endl;
+
+  calcAgeCompResiduals();
+  if(DEBUG_FLAG) cout<<"--> Ok after calcAgeCompResiduals           <--"<<endl;
+
+  calcEggSurveyResiduals();
+  if(DEBUG_FLAG) cout<<"--> Ok after calcEggSurveyResiduals         <--"<<endl;
+
+  calcMiledaySurveyResiduals();
+  if(DEBUG_FLAG) cout<<"--> Ok after calcMiledaySurveyResiduals     <--"<<endl;
+
+  //if( dMiscCont(2) ) {
+    calcCatchResiduals();
+    if(DEBUG_FLAG) cout<<"--> Ok after calcCatchResiduals           <--"<<endl; 
+  // }
+
+  calcObjectiveFunction(); nf++;
+  if(DEBUG_FLAG) cout<<"--> Ok after calcObjectiveFunction          <--"<<endl;
+
+
+  if( last_phase() ) {
+    runForecast();
+  }
+
+  if(mceval_phase()) {
+    writePosteriorSamples();
+  }
+
+  if(sd_phase()) {
+    sd_terminal_ssb = ssb(mod_nyr);
+    sd_ssb  = ssb(mod_syr,mod_nyr);
+  }
+
+  // | OBJECTIVE FUNCTION THAT ADMB WILL MINIMIZE
+  nll_total = sum(nll) + sum(penll) + sum(calcPriors()) + fpen;
+
+  if(DEBUG_FLAG){
+    // COUT(f);
+    COUT(nll);
+    COUT(penll);
+    COUT(calcPriors());
+    if(fpen > 0 ){COUT(fpen);}
+  }  
+
 // // |---------------------------------------------------------------------------|
-// // | RUN STOCK ASSESSMENT MODEL ROUTINES
-// // |---------------------------------------------------------------------------|
-// // | PSUEDOCODE:
-// // | - initialize model parameters.
-// // | - initialize Maturity Schedule information.
-// // | - get natural mortality schedules.
-// // | - get fisheries selectivity schedules.
-// // | - initialize State variables
-// // | - update State variables:
-// // |    - calculate spawning stock biomass
-// // |    - calculate age-composition residuals
-// // | - stock-recruitment relationship
-// // | - observation models:
-// // |    - calculate age-composition residuals
-// // |    - calculate egg-deposition survey residuals
-// // |    - calculate mile-days of milt residuals
-// // |    - calculate catch residuals if model is conditioned on effort
-// // | - calculate objective function value
-// // | - TERMINAL PHASE:
-// // |    - run forecast model
-// // |    - save posterior samples from -mceval cmd line option
-// // |---------------------------------------------------------------------------|
+
+FUNCTION void runForecast()
+  /** 
+  Conduct a 1-year ahead forcasts based on SR
+  PSUEDOCODE:
+    -1 declare variables for forcasting.
+      * recruitment, spawning biomass, numbers-at-age
+      * selectivity curve
+    -2 Calculate F-at-age conditional on harvest rule.
+      * harvest_rate = 20% || set TAC option
+    -3 Update state variables from pyr=mod_nyr+1 to pyr+2
+      * recruitment based on ssb(pyr-sage)
+    -4 Compute GHLs given threshold and target harvest rate
+      * user specifies threshold and harvest rate in control file.
+
+  **/
+  // forecast from nyr to pyr
+  int nyr = mod_nyr;
+  int pyr = nyr+1; // forecast one additional year
+  dvariable fore_rt;  // sage recruits
+
+  // numbers and catch-at-age vectors for single forecast year (would be matrix for additional years)
+  dvar_vector fore_nj(sage,nage); //numbers-at-age
+  dvar_vector fore_cj(sage,nage); //catch-at-age
+
+  fore_rt = so * ssb(pyr-sage) * exp(-beta*ssb(pyr-sage)); // ricker stock-recruit curve to forecast one year of recruitment
+  fore_nj = Nij(pyr); // abundance at age in forecast year
+  fore_nj(sage) = fore_rt; // recruits in forecast year
+  fore_vb = fore_nj * elem_prod(Sij(nyr),data_cm_waa(nyr)(sage,nage)); // vulnerable biomass at age
+  // *FLAG* spawning biomass = abundance * survey spawner weight-at-age * proportion mature
+  fore_sb = fore_nj * elem_prod(mat(nyr),data_sp_waa(nyr)(sage,nage)); // spawning biomass at age 
+  sd_forecast_ssb = fore_sb; // save forecast spawning biomass
+
+  // *FLAG* writing a function for potential management rules could be used for MSE
+  // *FLAG* could output pre-fishery forecast, and post-fishery forecast based on chosen rule
   
-//   initializeModelParameters();
-//   if(DEBUG_FLAG) cout<<"--> Ok after initializeModelParameters      <--"<<endl;
+  // GHL for pyr
+  // sliding scale harvest rate developed for Sitka
+  // *FLAG* will need adjustments for stocks besides Sitka
+  double ssb_threshold = dMiscCont(3); 
+  double target_hr = dMiscCont(4);
+  dvariable hr = (2.0 + 8.0*fore_sb / dMiscCont(5))/100.0;
+  if( hr > target_hr) {
+    hr = target_hr;
+  } else if( fore_sb < ssb_threshold ) {
+    hr = 0.0;
+  }
 
-//   initializeMaturitySchedules();
-//   if(DEBUG_FLAG) cout<<"--> Ok after initializeMaturitySchedules    <--"<<endl;
+  ghl = hr * fore_sb;
+  //cout<<"harvest rate = "<<hr<<" GHL = "<<ghl<<endl;
 
-//   calcNaturalMortality();
-//   if(DEBUG_FLAG) cout<<"--> Ok after calcNaturalMortality           <--"<<endl;
-  
-//   calcSelectivity();
-//   if(DEBUG_FLAG) cout<<"--> Ok after calcSelectivity                <--"<<endl;
-  
-//   if( dMiscCont(2) ) {
-//     calcFishingMortalitiy();
-//     if(DEBUG_FLAG) cout<<"--> Ok after calcFishingMortalitiy          <--"<<endl;  
-//   }
+  // update state variables to pyr+1 so you can predict
+  // the effect of the 2016 fishery on the 2017 spawning stock.
+  // incorporated ghl from this year's catch
+  // predicted catch-at-age proportions
+  dvar_vector pa = elem_prod(fore_nj,Sij(nyr));
+  pa /= sum(pa);
+  // mean weight of catch
+  dvariable wbar = pa * data_cm_waa(nyr)(sage,nage);
+  // forecast catch at age
+  fore_cj = ghl/wbar * pa;
+  // forecast abundance at age at end of year (after fishing harvest and natural mortality)
+  fore_nj = elem_prod(fore_nj - fore_cj,mfexp(-Mij(nyr)));
+  // forecast recruitment
+  fore_nj(sage) = so * ssb(pyr+1-sage) * exp(-beta*ssb(pyr-sage));
+  // forecast spawning biomass = abundance * survey spawner weight-at-age * proportion mature
+  fore_sb = fore_nj * elem_prod(mat(nyr),data_sp_waa(nyr)(sage,nage));
+  sd_projected_ssb = fore_sb;
 
-//   initializeStateVariables();
-//   if(DEBUG_FLAG) cout<<"--> Ok after initializeStateVariables       <--"<<endl;
-  
-//   updateStateVariables();
-//   if(DEBUG_FLAG) cout<<"--> Ok after updateStateVariables           <--"<<endl;
-  
-//   calcSpawningStockRecruitment();
-//   if(DEBUG_FLAG) cout<<"--> Ok after calcSpawningStockRecruitment   <--"<<endl;
+FUNCTION void writePosteriorSamples()
+  /**
+  - This function is only envoked when the -mceval
+    command line option is implemented.
+  */
+  // example of saving posterior samples of spawning stock biomass
+  // rows = number of samples
+  // columns = number of years
+  if(nf==1){
+    // example of saving a time-varying parameter posterior distributions
+    ofstream ofs("ssb.ps");
 
-//   calcAgeCompResiduals();
-//   if(DEBUG_FLAG) cout<<"--> Ok after calcAgeCompResiduals           <--"<<endl;
+    // example of saving two non-time-varying posterior distributions
+    ofstream ofs2("natural.ps");
+    ofs2 << "natural_mortality\tnatural_survival" << endl;
+  }
+  ofstream ofs("ssb.ps",ios::app);
+  ofs<<ssb<<endl;
 
-//   calcEggSurveyResiduals();
-//   if(DEBUG_FLAG) cout<<"--> Ok after calcEggSurveyResiduals         <--"<<endl;
-
-//   calcMiledaySurveyResiduals();
-//   if(DEBUG_FLAG) cout<<"--> Ok after calcMiledaySurveyResiduals     <--"<<endl;
-
-//   //if( dMiscCont(2) ) {
-//     calcCatchResiduals();
-//     if(DEBUG_FLAG) cout<<"--> Ok after calcCatchResiduals           <--"<<endl; 
-//   // }
-
-//   calcObjectiveFunction(); nf++;
-//   if(DEBUG_FLAG) cout<<"--> Ok after calcObjectiveFunction          <--"<<endl;
+  ofstream ofs2("natural.ps",ios::app);
+  ofs2<< exp(log_natural_mortality) << "\t" << exp(-(exp(log_natural_mortality))) << endl;
 
 
-//   if( last_phase() ) {
-//     runForecast();
-//   }
-
-//   if(mceval_phase()) {
-//     writePosteriorSamples();
-//   }
-//   if(sd_phase()) {
-//     sd_terminal_ssb = ssb(mod_nyr);
-//     sd_ssb  = ssb(mod_syr,mod_nyr);
-//   }
-
-//   // | OBJECTIVE FUNCTION THAT ADMB WILL MINIMIZE
-//   nll_total = sum(nll) + sum(penll) + sum(calcPriors()) + fpen;
-
-//   if(DEBUG_FLAG){
-//     COUT(f);
-//     COUT(nll);
-//     COUT(penll);
-//     COUT(calcPriors());
-//     if(fpen > 0 ){COUT(fpen);}
-//   }  
-
-// // |---------------------------------------------------------------------------|
-
-// FUNCTION void runForecast()
-//   /** 
-//   Conduct a 1-year ahead forcasts based on SR
-//   PSUEDOCODE:
-//     -1 declare variables for forcasting.
-//       * recruitment, spawning biomass, numbers-at-age
-//       * selectivity curve
-//     -2 Calculate F-at-age conditional on harvest rule.
-//       * harvest_rate = 20% || set TAC option
-//     -3 Update state variables from pyr=mod_nyr+1 to pyr+2
-//       * recruitment based on ssb(pyr-sage)
-//     -4 Compute GHLs given threshold and target harvest rate
-//       * user specifies threshold and harvest rate in control file.
-
-//   **/
-//   int nyr = mod_nyr;
-//   int pyr = nyr+1;
-//   dvariable fore_rt;  // sage recruits
-
-//   dvar_vector fore_nj(sage,nage); //numbers-at-age
-//   dvar_vector fore_cj(sage,nage); //catch-at-age
-
-//   fore_rt = so * ssb(pyr-sage) * exp(-beta*ssb(pyr-sage));
-//   fore_nj = Nij(pyr); fore_nj(sage) = fore_rt;
-//   fore_vb = fore_nj * elem_prod(Sij(nyr),data_cm_waa(nyr)(sage,nage));
-//   fore_sb = fore_nj * elem_prod(mat(nyr),data_sp_waa(nyr)(sage,nage));
-//   sd_forecast_ssb = fore_sb;
-
-//   // GHL for pyr
-//   double ssb_threshold = dMiscCont(3);
-//   double target_hr = dMiscCont(4);
-//   dvariable hr = (2.0 + 8.0*fore_sb / dMiscCont(5))/100.0;
-//   if( hr > target_hr) {
-//     hr = target_hr;
-//   } else if( fore_sb < ssb_threshold ) {
-//     hr = 0.0;
-//   }
-
-//   ghl = hr * fore_sb;
-//   //cout<<"harvest rate = "<<hr<<" GHL = "<<ghl<<endl;
-
-//   // update state variables to pyr+1 so you can predict
-//   // the effect of the 2016 fishery on the 2017 spawning stock.
-//   // predicted catch-at-age
-//   dvar_vector pa = elem_prod(fore_nj,Sij(nyr));
-//   pa /= sum(pa);
-//   dvariable wbar = pa * data_cm_waa(nyr)(sage,nage);
-//   fore_cj = ghl/wbar * pa;
-//   fore_nj = elem_prod(fore_nj - fore_cj,mfexp(-Mij(nyr)));
-//   fore_nj(sage) = so * ssb(pyr+1-sage) * exp(-beta*ssb(pyr-sage));
-//   fore_sb = fore_nj * elem_prod(mat(nyr),data_sp_waa(nyr)(sage,nage));
-//   sd_projected_ssb = fore_sb;
-
-// FUNCTION void writePosteriorSamples()
-//   /**
-//   - This function is only envoked when the -mceval
-//     command line option is implemented.
-//   */
-//   if(nf==1){
-//     ofstream ofs("ssb.ps");
-//   }
-//   ofstream ofs("ssb.ps",ios::app);
-//   ofs<<ssb<<endl;
-  
-// FUNCTION void runSimulationModel(const int& rseed)
-  
-//     PSUEDOCODE:
-//     1) initialize model parameters based on pin file, or control file.
-//     2) initialize maturity schedules for all block years.
-//     3) initialize natural mortality schedules for all block years.
-//     4) calculate selectivity parameters.
-//     5) generate random normal deviates for process/observation errors.
-//     6) initialize state variables.
-//     7) update state variables conditioned on the observed catch data.
-//     8) calculate age-composition residuals and over-write input data in memory.
-//     9) calculate egg survey residuals and simulate fake survey.
-  
-//   if(global_parfile) {
-//     cout<<"\nUsing pin file for simulation parameter values.\n"<<endl;
-//   }
-
-//   // 1) initialize model parameters based on pin file, or control file.
-//   initializeModelParameters();
-
-//   // 2) initialize maturity schedules for all block years.
-//   initializeMaturitySchedules();
-
-//   // 3) initialize natural mortality schedules for all block years.
-//   calcNaturalMortality();
-
-//   // 4) calculate selectivity parameters.
-//   calcSelectivity();
-  
-//   // 4b) calculate fishing mortality.
-//   calcFishingMortality();
-
-//   // 5) generate random normal deviates for process errors:
-//   //    - log_m_devs
-//   //    - log_rinit_devs
-//   //    - log_rbar_devs
-//   random_number_generator rng(rseed);
-//   dvector epsilon_m_devs(1,nMortBlocks);
-//   dvector epsilon_rbar_devs(mod_syr,mod_nyr+1);
-//   dvector epsilon_rinit_devs(sage+1,nage);
-
-//   double sigma_m_devs = dMiscCont(6);
-//   double sigma_rbar_devs = value(exp(log_sigma_r));
-//   double sigma_rinit_devs = value(exp(log_sigma_r));
-
-//   if ( rseed == 0 ) {
-//     sigma_m_devs = 0.0;
-//     sigma_rbar_devs = 0.0;
-//     sigma_rinit_devs = 0.0;
-
-//   }
-
-//   epsilon_m_devs.fill_randn(rng);
-//   epsilon_rbar_devs.fill_randn(rng);
-//   epsilon_rinit_devs.fill_randn(rng);
-
-//   log_m_devs = dvar_vector(epsilon_m_devs * sigma_m_devs - 0.5 * square(sigma_m_devs));
-//   log_rbar_devs = dvar_vector(epsilon_rbar_devs * sigma_rbar_devs - 0.5 * square(sigma_rbar_devs));
-//   log_rinit_devs = dvar_vector(epsilon_rinit_devs * sigma_rinit_devs - 0.5 * square(sigma_rinit_devs));
 
   
-//   // 6) initialize state variables.
-//   initializeStateVariables();
+FUNCTION void runSimulationModel(const int& rseed)
+  
+//    // PSUEDOCODE:
+//    // 1) initialize model parameters based on pin file, or control file.
+//    // 2) initialize maturity schedules for all block years.
+//    // 3) initialize natural mortality schedules for all block years.
+//    // 4) calculate selectivity parameters.
+//    // 5) generate random normal deviates for process/observation errors.
+//    // 6) initialize state variables.
+ //   // 7) update state variables conditioned on the observed catch data.
+  //  // 8) calculate age-composition residuals and over-write input data in memory.
+  //  // 9) calculate egg survey residuals and simulate fake survey.
+  
+  if(global_parfile) {
+    cout<<"\nUsing pin file for simulation parameter values.\n"<<endl;
+  }
 
-//   // 7) update state variables conditioned on the observed catch data.
-//   updateStateVariables();
+  // Same state dynamics model as estimation model, but within simulation
+  // 1) initialize model parameters based on pin file, or control file.
+  initializeModelParameters();
 
-//   // 7a) calcSpawningRecruitment
-//   calcSpawningStockRecruitment();
-//   sim_spawners = value(spawners);
-//   sim_recruits = value(column(Nij,sage)(rec_syr,mod_nyr+1));
+  // 2) initialize maturity schedules for all block years.
+  initializeMaturitySchedules();
 
+  // 3) initialize natural mortality schedules for all block years.
+  calcNaturalMortality();
 
-//   // 8) calculate age-composition residuals and over-write input data in memory.
-//   //    - Note the age-comps are sampled from a multivariate logistic dist.
-//   calcAgeCompResiduals();
-//   double sigma_a = 0.07;
-//   if( rseed == 0 ) sigma_a = 0.0;
-//   for(int i = mod_syr; i <= mod_nyr; i++) {
-//     dvector t1 = value(pred_cm_comp(i));
-//     dvector t2 = value(pred_sp_comp(i));
+  // 4) calculate selectivity parameters.
+  calcSelectivity();
+  
+  // 4b) calculate fishing mortality.
+  calcFishingMortality();
+
+  // special for simulation step!
+  // 5) generate random normal deviates for process errors:
+  //    - log_m_devs
+  //    - log_rinit_devs
+  //    - log_rbar_devs
+  // simulate process error
+  random_number_generator rng(rseed);
+  dvector epsilon_m_devs(1,nMortBlocks);
+  dvector epsilon_rbar_devs(mod_syr,mod_nyr+1);
+  dvector epsilon_rinit_devs(sage+1,nage);
+
+  double sigma_m_devs = dMiscCont(6);
+  double sigma_rbar_devs = value(exp(log_sigma_r));
+  double sigma_rinit_devs = value(exp(log_sigma_r));
+
+  // if no rseed is given in command line "-sim rseed", deviations set to zero
+  if ( rseed == 0 ) {
+    sigma_m_devs = 0.0;
+    sigma_rbar_devs = 0.0;
+    sigma_rinit_devs = 0.0;
+  }
+
+  epsilon_m_devs.fill_randn(rng);
+  epsilon_rbar_devs.fill_randn(rng);
+  epsilon_rinit_devs.fill_randn(rng);
+
+  // log deviations to be used to add process error wtihin simulation
+  // (estimated process error in estimation model)
+  log_m_devs = dvar_vector(epsilon_m_devs * sigma_m_devs - 0.5 * square(sigma_m_devs));
+  log_rbar_devs = dvar_vector(epsilon_rbar_devs * sigma_rbar_devs - 0.5 * square(sigma_rbar_devs));
+  log_rinit_devs = dvar_vector(epsilon_rinit_devs * sigma_rinit_devs - 0.5 * square(sigma_rinit_devs));
+
+ // Back to same state dynamics model as estimation model, but within simulation
+  // 6) initialize state variables.
+  initializeStateVariables();
+
+  // 7) update state variables conditioned on the observed catch data.
+  updateStateVariables();
+
+  // 7a) calcSpawningRecruitment
+  calcSpawningStockRecruitment();
+  sim_spawners = value(spawners);
+  sim_recruits = value(column(Nij,sage)(rec_syr,mod_nyr+1));
+
+  // Observation model - rewrite data inputs, change to simulated data
+  // 8) calculate age-composition residuals and over-write input data in memory.
+  //    - Note the age-comps are sampled from a multivariate logistic dist.
+  calcAgeCompResiduals();
+  double sigma_a = 0.07;
+  if( rseed == 0 ) sigma_a = 0.0;
+  for(int i = mod_syr; i <= mod_nyr; i++) {
+    dvector t1 = value(pred_cm_comp(i));
+    dvector t2 = value(pred_sp_comp(i));
     
-//     data_cm_comp(i)(sage,nage) = rmvlogistic(t1,sigma_a,rseed + i);
-//     data_sp_comp(i)(sage,nage) = rmvlogistic(t2,sigma_a,rseed - i);
-//   }
+    data_cm_comp(i)(sage,nage) = rmvlogistic(t1,sigma_a,rseed + i);
+    data_sp_comp(i)(sage,nage) = rmvlogistic(t2,sigma_a,rseed - i);
+  }
 
 
-//   // 9) calculate egg survey residuals and simulate fake survey.
-//   calcEggSurveyResiduals();
+  // 9) calculate egg survey residuals and simulate fake survey.
+  calcEggSurveyResiduals();
   
-//   dvector epsilon_egg_dep(mod_syr,mod_nyr);
-//   epsilon_egg_dep.fill_randn(rng);
-//   for(int i = mod_syr; i <= mod_nyr; i++) {
-//     if( data_egg_dep(i,2) > 0 ) {
-//       double sd = data_egg_dep(i,3);
-//       //double log_it = value(log(pred_egg_dep(i)));
-//       data_egg_dep(i,2) = value(pred_egg_dep(i)) 
-//                           * exp(epsilon_egg_dep(i) * sd - 0.5 * square(sd));  
-//       //data_egg_dep(i,2) = exp(log_it + epsilon_egg_dep(i) * sd) - 05 * square(sd));
-//     }
-//   }
+  dvector epsilon_egg_dep(mod_syr,mod_nyr);
+  epsilon_egg_dep.fill_randn(rng);
+  for(int i = mod_syr; i <= mod_nyr; i++) {
+    if( data_egg_dep(i,2) > 0 ) {
+      double sd = data_egg_dep(i,3);
+      //double log_it = value(log(pred_egg_dep(i)));
+      data_egg_dep(i,2) = value(pred_egg_dep(i)) 
+                          * exp(epsilon_egg_dep(i) * sd - 0.5 * square(sd));  
+      //data_egg_dep(i,2) = exp(log_it + epsilon_egg_dep(i) * sd) - 05 * square(sd));
+    }
+  }
 
-//   // 10) calculate mile_days
-//   calcMiledaySurveyResiduals();
+  // 10) calculate mile_days
+  calcMiledaySurveyResiduals();
   
-//   dvector epsilon_mileday(mod_syr,mod_nyr);
-//   epsilon_mileday.fill_randn(rng);
-//   for(int i = mod_syr; i <= mod_nyr; i++) {
-//     if( data_mileday(i,2) > 0 ) {
-//       double sd = data_mileday(i,3);
-//       data_mileday(i,2) = value(pred_mileday(i))
-//                           * exp(epsilon_mileday(i) * sd - 0.5 * square(sd));
-//     }
-//   }
+  dvector epsilon_mileday(mod_syr,mod_nyr);
+  epsilon_mileday.fill_randn(rng);
+  for(int i = mod_syr; i <= mod_nyr; i++) {
+    if( data_mileday(i,2) > 0 ) {
+      double sd = data_mileday(i,3);
+      data_mileday(i,2) = value(pred_mileday(i))
+                          * exp(epsilon_mileday(i) * sd - 0.5 * square(sd));
+    }
+  }
 
-//   // 11) calculate predicted catch
-//   calcCatchResiduals();
+  // 11) calculate predicted catch, which will become equal to the simulated data catch
+  calcCatchResiduals();
 
-//   dvector epsilon_catch(mod_syr,mod_nyr);
-//   epsilon_catch.fill_randn(rng);
-//   for(int i = mod_syr; i <= mod_nyr; i++) {
-//     if( data_ct_raw(i,2) > 0 ) {
-//       double sd = data_ct_raw(i,3);
-//       data_ct_raw(i,2) = value(pred_catch(i))
-//                           * exp(epsilon_catch(i) * sd - 0.5 * square(sd));
-//     }
-//   }
-
-
-// FUNCTION void initializeModelParameters()
-//   fpen = 0;
-//   log_natural_mortality = theta(1);
-//   log_rinit             = theta(2);
-//   log_rbar              = theta(3);
-//   log_ro                = theta(4);
-//   log_reck              = theta(5);
-//   log_sigma_r           = sqrt(1.0/theta(6));
-//   // COUT(theta);
+  dvector epsilon_catch(mod_syr,mod_nyr);
+  epsilon_catch.fill_randn(rng);
+  for(int i = mod_syr; i <= mod_nyr; i++) {
+    if( data_ct_raw(i,2) > 0 ) {
+      double sd = data_ct_raw(i,3);
+      data_ct_raw(i,2) = value(pred_catch(i))
+                          * exp(epsilon_catch(i) * sd - 0.5 * square(sd));
+    }
+  }
 
 
+FUNCTION void initializeModelParameters()
+  // renames six model parameters
+  fpen = 0;
+  log_natural_mortality = theta(1);
+  log_rinit             = theta(2);
+  log_rbar              = theta(3);
+  log_ro                = theta(4);
+  log_reck              = theta(5);
+  log_sigma_r           = sqrt(1.0/theta(6));
+  // COUT(theta);
 
-// FUNCTION void initializeMaturitySchedules() 
-//   int iyr = mod_syr;
-//   int jyr = 0;
-//   mat.initialize();
+
+
+FUNCTION void initializeMaturitySchedules() 
+  // indices over years
+  int iyr = mod_syr; // startyear
+  int jyr = 0; // accomodate for retrospective years with blocks
+
+  // make sure all elements of mat are zero
+  mat.initialize();
   
-//   for(int h = 1; h <= nMatBlocks; h++) {
-//     dvariable mat_a50 = mat_params(h,1);
-//     dvariable mat_a95 = mat_params(h,2);
+  // looping over the nubmer of maturity blocks
+  for(int h = 1; h <= nMatBlocks; h++) {
+    // matching maturity parameters to maturity block
+    dvariable mat_a50 = mat_params(h,1);
+    dvariable mat_a95 = mat_params(h,2);
 
-//     jyr = (h != nMatBlocks) ? nMatBlockYear(h) : nMatBlockYear(h)-retro_yrs;
+    // ifelse statement to adjust maximum year with retrospective & blocks
+    // accounts for if removing years with retrospective removes or reduces a maturity block
+    // *FLAG* check this is doing what you want it to do
+    jyr = (h != nMatBlocks) ? nMatBlockYear(h) : nMatBlockYear(h)-retro_yrs;
     
-//     // fill maturity array using logistic function
-//     do{
-//       mat(iyr++) = plogis95(age,mat_a50,mat_a95);
-//     } while(iyr <= jyr);  
-//   }
+    // fill maturity array using logistic function
+    do{
+      mat(iyr++) = plogis95(age,mat_a50,mat_a95);
+    } while(iyr <= jyr);  
+  }
   
 
-// FUNCTION void calcNaturalMortality()
+FUNCTION void calcNaturalMortality()
   
-//   int iyr = mod_syr;
-//   int jyr;
-//   Mij.initialize();
-//   switch(mort_type) {
-//     case 1: // constant M within block.
-//       for(int h = 1; h <= nMortBlocks; h++){
-//         dvariable mi = mfexp(log_natural_mortality + log_m_devs(h));
+  // indices over years
+  int iyr = mod_syr;
+  int jyr; // accounting for retrospective years
+
+  // intialize natural mortality over time by age
+  Mij.initialize();
+
+  // case1: estimate constant natural mortality for each block
+  // alternate option for node: same breaks for time block are instead nodes
+  // break between each case
+  switch(mort_type) {
+    case 1: // constant M within block.
+      for(int h = 1; h <= nMortBlocks; h++){
+        dvariable mi = mfexp(log_natural_mortality + log_m_devs(h));
         
-//         jyr = h != nMortBlocks?nMortBlockYear(h):nMortBlockYear(h)-retro_yrs;
-//         // fill mortality array by block
-//         do{
-//           Mij(iyr++) = mi;
-//         } while(iyr <= jyr);
-//       }
-//     break;
-//     case 2: // cubic spline  
-//       dvector iiyr = dvector((nMortBlockYear - mod_syr)/(mod_nyr-mod_syr));
-//       dvector jjyr(mod_syr,mod_nyr);
-//       jjyr.fill_seqadd(0,double(1.0/(mod_nyr-mod_syr)));
-//       dvar_vector mi = log_natural_mortality + log_m_devs;
-//       vcubic_spline_function cubic_spline_m(iiyr,mi);
-//       dvar_vector mtmp = cubic_spline_m(jjyr);
-//       for(int i=mod_syr; i <= mod_nyr; i++)
-//       {
-//         Mij(i) = mfexp(mtmp(i));
-//       }
-//     break;
-//   }
+        jyr = h != nMortBlocks?nMortBlockYear(h):nMortBlockYear(h)-retro_yrs;
+        // fill mortality array by block
+        do{
+          Mij(iyr++) = mi;
+        } while(iyr <= jyr);
+      }
+    break;
+    case 2: // cubic spline  
+      // turning from blocks to years
+      // nodes at time block breaks
+      dvector iiyr = dvector((nMortBlockYear - mod_syr)/(mod_nyr-mod_syr));
+      dvector jjyr(mod_syr,mod_nyr);
+      jjyr.fill_seqadd(0,double(1.0/(mod_nyr-mod_syr)));
+
+      // add natural mortality deviations to natural mortality over time
+      // declaring mi and defining/evaluating what is mi in the same line
+      dvar_vector mi = log_natural_mortality + log_m_devs;
+
+      // apply cubic spline function with arguments years and predicted M in log space
+      vcubic_spline_function cubic_spline_m(iiyr,mi);
+
+      // cubic spline function including nodes
+      dvar_vector mtmp = cubic_spline_m(jjyr);
+      for(int i=mod_syr; i <= mod_nyr; i++)
+      {
+        // transform cubic spline function from log to regular space
+        Mij(i) = mfexp(mtmp(i));
+      }
+    break;
+  }
   
   
 
-// FUNCTION void calcSelectivity()
-//   /**
-//     - Loop over each of the selectivity block/pattern
-//     - Determine which selectivity type is being used.
-//     - get parameters from log_slx_pars
-//     - calculate the age-dependent selectivity pattern
-//     - fill selectivty array for that block.
-//     - selectivity is scaled to have a mean = 1 across all ages.
-//   */
-//   dvariable p1,p2;
-//   dvar_vector slx(sage,nage);
-//   log_slx.initialize();
-  
-  
+FUNCTION void calcSelectivity()
+  /**
+    - Loop over each of the selectivity block/pattern
+    - Determine which selectivity type is being used.
+    - get parameters from log_slx_pars
+    - calculate the age-dependent selectivity pattern
+    - fill selectivty array for that block.
+    - selectivity is scaled to have a mean = 1 across all ages.
+  */
+  // initialize selectivity parameters
+  dvariable p1,p2;
+  // selectivity at age
+  dvar_vector slx(sage,nage);
 
-//   for(int h = 1; h <= nSlxBlks; h++){
+  // initialize ragged selectivity matrix
+  log_slx.initialize();
+  
+  // loop over selectivity blocks
+  for(int h = 1; h <= nSlxBlks; h++){
 
-//     switch(nSelType(h)){
-//       case 1: //logistic
-//         p1  = mfexp(log_slx_pars(h,1,1));
-//         p2  = mfexp(log_slx_pars(h,1,2));
-//         slx = plogis(age,p1,p2) + TINY;
-//       break;
-//     }
+    switch(nSelType(h)){
+      case 1: //logistic
+        p1  = mfexp(log_slx_pars(h,1,1));
+        p2  = mfexp(log_slx_pars(h,1,2));
+
+        // add a very small value to the logistic function (never zero)
+        slx = plogis(age,p1,p2) + TINY;
+      break;
+    }
     
-//     int jyr = h != nSlxBlks ? nslx_nyr(h):nslx_nyr(h)-retro_yrs;
-//     for(int i = nslx_syr(h); i <= jyr; i++){
-//       log_slx(i) = log(slx) - log(mean(slx));
-//     }
-//   }
-//   Sij.sub(mod_syr,mod_nyr) = mfexp(log_slx);
-
-
-// FUNCTION void calcFishingMortality()
-//   /**
-//     - Calculate Fishing mortality, and then Zij = Mij + Fij
-//     */
-
-//   for(int i = mod_syr; i <= mod_nyr; i++) {
-//     Fij(i) = exp(log_ft_pars(i)) * Sij(i);
-//   }
+ //  // ifelse statement accounting for blocks when using retrospective years
+ //  // scale selectivity
+ //  // old herring model - scaled selectivity by dividing by the max so it adds to one (but this is not differentiable)
+  // // this process is to get the same thing but keeping differentiable 
+    int jyr = h != nSlxBlks ? nslx_nyr(h):nslx_nyr(h)-retro_yrs;
+    for(int i = nslx_syr(h); i <= jyr; i++){
+      log_slx(i) = log(slx) - log(mean(slx));
+    }
+  }
+  Sij.sub(mod_syr,mod_nyr) = mfexp(log_slx);
 
 
 
-// FUNCTION void initializeStateVariables()
-//   /**
-//     - Set initial values for numbers-at-age matrix in first year
-//       and sage recruits for all years.
-//     */
-//   Nij.initialize();
+FUNCTION void calcFishingMortality()
+  /**
+    - Calculate Fishing mortality, and then Zij = Mij + Fij
+    */
+  // estimated fishing mortality at full selectivity
+// multiplied by selectivity to account for less than 100% selected ages
+  for(int i = mod_syr; i <= mod_nyr; i++) {
+    Fij(i) = exp(log_ft_pars(i)) * Sij(i);
+  }
 
-//   // initialize first row of numbers-at-age matrix
-//   // lx is a vector of survivorship (probability of surviving to age j)
-//   dvar_vector lx(sage,nage);
 
-//   for(int j = sage; j <= nage; j++){
+FUNCTION void initializeStateVariables()
+  /**
+    - Set initial values for numbers-at-age matrix in first year
+      and sage recruits for all years.
+    */
+    // set numbers at age over time matrix to zero, then fill in
+  Nij.initialize();
+
+  // initialize first row of numbers-at-age matrix
+  // lx is a vector of survivorship (probability of surviving to age j)
+  dvar_vector lx(sage,nage);
+
+  // loop over ages
+  for(int j = sage; j <= nage; j++){
     
-//     lx(j) = exp(-Mij(mod_syr,j)*(j-sage));
-//     if( j==nage ) lx(j) /= (1.0-exp(-Mij(mod_syr,j)));
+    // probability of surviving from your age last year to your current age
+    lx(j) = exp(-Mij(mod_syr,j)*(j-sage));
+    // plus group - can live beyond age 8 but M will be constant for age 8+
+    if( j==nage ) lx(j) /= (1.0-exp(-Mij(mod_syr,j)));
 
-
-//     if( j > sage ){
-//       Nij(mod_syr)(j) = mfexp(log_rinit + log_rinit_devs(j)) * lx(j);     
-//     }
-//   } 
+    // Abundance at age in year 1 = (Initial recruits + deviations of abundance in each age) * survivorship
+    if( j > sage ){
+      Nij(mod_syr)(j) = mfexp(log_rinit + log_rinit_devs(j)) * lx(j);     
+    }
+  } 
     
+  // Recruits in all year -- iniitialize first column of numbers-at-age matrix
+  for(int i = mod_syr; i <= mod_nyr + 1; i++){
+    Nij(i,sage) = mfexp(log_rbar + log_rbar_devs(i));
+  }
+  // COUT(lx);
+  // COUT(Nij);
 
 
-//   // iniitialize first column of numbers-at-age matrix
-//   for(int i = mod_syr; i <= mod_nyr + 1; i++){
-//     Nij(i,sage) = mfexp(log_rbar + log_rbar_devs(i));
-//   }
-//   //COUT(lx);
-//   //COUT(Nij);
+FUNCTION void updateStateVariables()
+  /**
+  - Update the numbers-at-age conditional on the catch-at-age.
+  - Assume a pulse fishery.
+  - step 1 calculate a vector of vulnerable-numbers-at-age
+  - step 2 calculate vulnerable proportions-at-age.
+  - step 3 calc average weight of catch (wbar) conditional on Qij.
+  - step 4 calc catch-at-age | catch in biomass Cij = Ct/wbar * Qij.
+  - step 5 condition on Ft or else condition on observed catch.
+  - step 6 update numbers-at-age (using a very dangerous difference eqn.)
 
+  Nov 30, 2016
+  - added options for simulation model:
+    - b_simulation_flag is true, then condition model on catch & S-R curve.
+  */
+    
+  // start matrices for proportions at 0
+  Qij.initialize(); // vulnerable proportion-at-age
+  Cij.initialize(); // catch-at-age in numbers
+  Pij.initialize(); // numbers at age post-harvest
 
-// FUNCTION void updateStateVariables()
-//   /**
-//   - Update the numbers-at-age conditional on the catch-at-age.
-//   - Assume a pulse fishery.
-//   - step 1 calculate a vector of vulnerable-numbers-at-age
-//   - step 2 calculate vulnerable proportions-at-age.
-//   - step 3 calc average weight of catch (wbar) conditional on Qij.
-//   - step 4 calc catch-at-age | catch in biomass Cij = Ct/wbar * Qij.
-//   - step 5 condition on Ft or else condition on observed catch.
-//   - step 6 update numbers-at-age (using a very dangerous difference eqn.)
-
-//   Nov 30, 2016
-//   - added options for simulation model:
-//     - b_simulation_flag is true, then condition model on catch & S-R curve.
-
-//   */
-
-//   Qij.initialize();
-//   Cij.initialize();
-//   Pij.initialize();
-//   dvariable wbar;   // average weight of the catch.
-//   dvar_vector vj(sage,nage);
-//   //dvar_vector pj(sage,nage);
-//   dvar_vector sj(sage,nage);
+  dvariable wbar;   // average weight of the catch.
+  dvar_vector vj(sage,nage); // vulnerable numbers at age
+  //dvar_vector pj(sage,nage);
+  dvar_vector sj(sage,nage); // natural survival at age
   
 
-//   for(int i = mod_syr; i <= mod_nyr; i++){
+  for(int i = mod_syr; i <= mod_nyr; i++){
 
 
-//     // step 1.
-//     vj = elem_prod(Nij(i),Sij(i));
+    // step 1. vulnerable numbers at age
+    vj = elem_prod(Nij(i),Sij(i));
 
-//     // step 2.
-//     Qij(i) = vj / sum(vj);
+    // step 2. proportion of vulnernable numbers at age
+    Qij(i) = vj / sum(vj);
 
-//     // ADF&G's approach.
-//     if( !dMiscCont(2) ) {
-//       // step 3.
-//       dvector wa = data_cm_waa(i)(sage,nage);
-//       wbar = wa * Qij(i);
+    // ADF&G's approach.  -- if conditioning on catch
+    if( !dMiscCont(2) ) {
+      // step 3. commercial catch weight-at-age
+      dvector wa = data_cm_waa(i)(sage,nage);
+      wbar = wa * Qij(i); // average weight of the catch
     
-//       // step 4.
-//       Cij(i) = data_catch(i,2) / wbar * Qij(i);
-//       // should use posfun here
-//       Pij(i) = posfun(Nij(i) - Cij(i),0.01,fpen); 
+      // step 4. catch numbers-at-age
+      Cij(i) = data_catch(i,2) / wbar * Qij(i);
+      // should use posfun here -- abundance in the water after catch
+      Pij(i) = posfun(Nij(i) - Cij(i),0.01,fpen); 
       
-//       // step 6. update numbers at age    
-//       sj = mfexp(-Mij(i));
-//       Nij(i+1)(sage+1,nage) =++ elem_prod(Pij(i)(sage,nage-1),
-//                                           sj(sage,nage-1));
-//       Nij(i+1)(nage) += Pij(i,nage) * sj(nage);       
-//     } 
-//     // step 5.
-//     // Condition on Ft
-//     else { 
-//       // add flexibility here for Popes approx, or different seasons               
-//       Pij(i) = elem_prod( Nij(i), exp(-Fij(i)) );
-//       Cij(i) = elem_prod( Nij(i), 1.-exp(-Fij(i)));
+      // step 6. update numbers at age    
+      sj = mfexp(-Mij(i)); // natural survival at age
+      // abundance at age next year = proportion surviving harvest this year * natural survival
+      // *FLAG* Assumes pulse fishery occurs at beginning of the year and then natural mortality occurs afterwards
+      Nij(i+1)(sage+1,nage) =++ elem_prod(Pij(i)(sage,nage-1),
+                                          sj(sage,nage-1));
+      //plus group
+      Nij(i+1)(nage) += Pij(i,nage) * sj(nage);       
+    } 
+    // step 5.
+    // Condition on Ft
+    else { 
+      // *FLAG* add flexibility here for Popes approx, or different seasons      
+      // total abundance multiplied by survival of fishing (not harvested)         
+      Pij(i) = elem_prod( Nij(i), exp(-Fij(i)) );
+      // total abundance multiplied by mortality by fishing
+      Cij(i) = elem_prod( Nij(i), 1.-exp(-Fij(i)));
       
-//       // the following assumes fishery is at the start of the year.
-//       dvar_vector zi = Mij(i) + Fij(i);
-//       Nij(i+1)(sage+1,nage) = ++ elem_prod(Nij(i)(sage,nage-1),
-//                                            mfexp(-zi(sage,nage-1)));
-//       Nij(i+1)(nage) += Nij(i,nage) * mfexp(-zi(nage));
-//     }
-//   }
+      // the following assumes fishery is at the start of the year.
+      dvar_vector zi = Mij(i) + Fij(i); // total mortality
+      Nij(i+1)(sage+1,nage) = ++ elem_prod(Nij(i)(sage,nage-1),
+                                           mfexp(-zi(sage,nage-1)));
+      Nij(i+1)(nage) += Nij(i,nage) * mfexp(-zi(nage));
+    }
+  }
 
-//   // cross check... Looks good.
-//   // COUT(Cij(mod_syr) * data_cm_waa(mod_syr)(sage,nage));
+  // cross check... Looks good.
+  // COUT(Cij(mod_syr) * data_cm_waa(mod_syr)(sage,nage));
 
 
-// FUNCTION void calcSpawningStockRecruitment()
-//   /**
-//   The functional form of the stock recruitment model follows that of a 
-//   Ricker model, where R = so * SSB * exp(-beta * SSB).  The two parameters
-//   so and beta where previously estimated as free parameters in the old
-//   herring model.  Herein this fucntion I derive so and beta from the 
-//   leading parameters Ro and reck; Ro is the unfished sage recruits, and reck
-//   is the recruitment compensation parameter, or the relative improvement in
-//   juvenile survival rates as the spawning stock SSB tends to 0. Simply a 
-//   multiple of the replacement line Ro/Bo.
+FUNCTION void calcSpawningStockRecruitment()
+  /**
+  The functional form of the stock recruitment model follows that of a 
+  Ricker model, where R = so * SSB * exp(-beta * SSB).  The two parameters
+  so and beta were previously estimated as free parameters in the old
+  herring model.  Herein this fucntion I derive so and beta from the 
+  leading parameters Ro and reck; Ro is the unfished sage recruits, and reck
+  is the recruitment compensation parameter, or the relative improvement in
+  juvenile survival rates as the spawning stock SSB tends to 0. Simply a 
+  multiple of the replacement line Ro/Bo.
 
-//   At issue here is time varying maturity and time-varying natural mortality.
-//   When either of these two variables are assumed to change over time, then
-//   the underlying stock recruitment relationship will also change. This 
-//   results in a non-stationary distribution.  For the purposes of this 
-//   assessment model, I use the average mortality and maturity schedules to
-//   derive the spawning boimass per recruit, which is ultimately used in 
-//   deriving the parameters for the stock recruitment relationship.
-//     */
+  Ro and reck are easier to interpret biologically than so and beta, so easier to develop priors or starting values than so and beta. so and beta can be calculated from leading parameters Ro and reck instead. 
 
-//   /*
-//     Spoke to Sherri about this. Agreed to change the equation to prevent
-//     substracting immature fish from the numbers before calculating SSB.
-//   */
-//   for(int i = mod_syr; i <= mod_nyr; i++){
-//     //Oij(i) = elem_prod(mat(i),Nij(i));
-//     //ssb(i) = (Oij(i) - Cij(i)) * data_sp_waa(i)(sage,nage);
+  At issue here is time varying maturity and time-varying natural mortality.
+  When either of these two variables are assumed to change over time, then
+  the underlying stock recruitment relationship will also change. This 
+  results in a non-stationary distribution.  For the purposes of this 
+  assessment model, I use the average mortality and maturity schedules to
+  derive the spawning boimass per recruit, which is ultimately used in 
+  deriving the parameters for the stock recruitment relationship.
+    */
 
-//     Oij(i) = elem_prod(mat(i),Nij(i)-Cij(i));
-//     ssb(i) = Oij(i) * data_sp_waa(i)(sage,nage);
-//   }
+  /*
+    Spoke to Sherri about this. Agreed to change the equation to prevent
+    substracting immature fish from the numbers before calculating SSB.
+  */
+  for(int i = mod_syr; i <= mod_nyr; i++){
+    // mature numbers at age before the fishery
+    //Oij(i) = elem_prod(mat(i),Nij(i));
+    // spawning biomass after the fishery
+    //ssb(i) = (Oij(i) - Cij(i)) * data_sp_waa(i)(sage,nage);
+
+    //mature numbers-at-age after the fishery
+    Oij(i) = elem_prod(mat(i),Nij(i)-Cij(i));
+    // spawning biomass after the fishery
+    ssb(i) = Oij(i) * data_sp_waa(i)(sage,nage);
+  }
   
 
-//   // average natural mortality
-//   dvar_vector mbar(sage,nage);
-//   int n = Mij.rowmax() - Mij.rowmin() + 1;
-//   mbar  = colsum(Mij)/n;
+  // average natural mortality
+  dvar_vector mbar(sage,nage);
+  int n = Mij.rowmax() - Mij.rowmin() + 1;
+  mbar  = colsum(Mij)/n;
 
-//   // average maturity
-//   dvar_vector mat_bar(sage,nage);
-//   mat_bar = colsum(mat)/n;
-
-
-//   // unfished spawning biomass per recruit
-//   dvar_vector lx(sage,nage);
-//   lx(sage) = 1.0;
-//   for(int j = sage + 1; j <= nage; j++){
-//     lx(j) = lx(j-1) * mfexp(-mbar(j-1));
-//     if(j == nage){
-//       lx(j) /= 1.0 - mfexp(-mbar(j));
-//     }
-//   }
-//   dvariable phie = lx * elem_prod(avg_sp_waa,mat_bar);
-
-//   // Ricker stock-recruitment function 
-//   // so = reck/phiE; where reck > 1.0
-//   // beta = log(reck)/(ro * phiE)
-
-//   // Beverton Holt use:
-//   // beta = (reck - 1.0)/(ro *phiE)
-//   ro   = mfexp(log_ro);
-//   reck = mfexp(log_reck) + 1.0;
-//   so   = reck/phie;
-//   beta = log(reck) / (ro * phie);
-
-//   spawners = ssb(mod_syr,mod_nyr-sage+1).shift(rec_syr);
-//   recruits = elem_prod( so*spawners , mfexp(-beta*spawners) );
-//   resd_rec = log(column(Nij,sage)(rec_syr,mod_nyr+1)+TINY) 
-//              - log(recruits+TINY);
+  // average maturity
+  dvar_vector mat_bar(sage,nage);
+  mat_bar = colsum(mat)/n;
 
 
+  // unfished spawning biomass per recruit
 
-// FUNCTION void calcAgeCompResiduals()
-//   /**
-//   - Commercial catch-age comp residuals
-//   - Spawning survey catch-age comp residuals.
-//   */
+  // survivorship (again!) but this time with average natural mortality
+  dvar_vector lx(sage,nage);
+  lx(sage) = 1.0;
+  for(int j = sage + 1; j <= nage; j++){
+    lx(j) = lx(j-1) * mfexp(-mbar(j-1));
+    if(j == nage){
+      lx(j) /= 1.0 - mfexp(-mbar(j));
+    }
+  }
+  // phie = predicted eggs produced in each age group
+  dvariable phie = lx * elem_prod(avg_sp_waa,mat_bar);
 
-//   resd_cm_comp.initialize();
-//   resd_sp_comp.initialize();
-//   for(int i = mod_syr; i <= mod_nyr; i++){
+  // Ricker stock-recruitment function 
+  // so = reck/phiE; where reck > 1.0
+  // beta = log(reck)/(ro * phiE)
+
+  // Beverton Holt use:
+  // beta = (reck - 1.0)/(ro *phiE)
+  ro   = mfexp(log_ro); // equilibrium recruitment
+  reck = mfexp(log_reck) + 1.0; // recruitment compensation ratio
+  // stock-recruit parameters
+  so   = reck/phie;
+  beta = log(reck) / (ro * phie);
+
+  spawners = ssb(mod_syr,mod_nyr-sage+1).shift(rec_syr);
+  recruits = elem_prod( so*spawners , mfexp(-beta*spawners) );
+  // vector of residual process error (log-normal).
+  resd_rec = log(column(Nij,sage)(rec_syr,mod_nyr+1)+TINY) 
+             - log(recruits+TINY);
+
+
+
+FUNCTION void calcAgeCompResiduals()
+  /**
+  - Commercial catch-age comp residuals
+  - Spawning survey catch-age comp residuals.
+  */
+
+  resd_cm_comp.initialize(); // commercial catch-age
+  resd_sp_comp.initialize(); // spawning survey catch-age
+  for(int i = mod_syr; i <= mod_nyr; i++){
     
-//     // commercial age-comp prediction 
-//     pred_cm_comp(i) = Qij(i);
-//     if( data_cm_comp(i,sage) >= 0 ){
-//       resd_cm_comp(i) = data_cm_comp(i)(sage,nage) - pred_cm_comp(i);
-//     }
+    // commercial age-comp prediction 
+    pred_cm_comp(i) = Qij(i);  //proportion of vulnernable numbers at age
+    // in the years with commercial age comp data, calculate residuals
+    if( data_cm_comp(i,sage) >= 0 ){
+      resd_cm_comp(i) = data_cm_comp(i)(sage,nage) - pred_cm_comp(i);
+    }
 
-//     // spawning age-comp prediction
-//     pred_sp_comp(i) = (Oij(i)+TINY) / sum(Oij(i)+TINY);
-//     if( data_sp_comp(i,sage) >= 0 ){
-//       resd_sp_comp(i) = data_sp_comp(i)(sage,nage) - pred_sp_comp(i);
-//     }
-//   }
+    // spawning age-comp prediction
+    // tiny is added to Oij so that none are zero
+    // but must divide by sum including tiny to recalculate the proportions to sum to 1.
+    pred_sp_comp(i) = (Oij(i)+TINY) / sum(Oij(i)+TINY); // proportion numbers-at-age after the fishery
+    // in the years with spawner survey comp data, calculate residuals
+    if( data_sp_comp(i,sage) >= 0 ){
+      resd_sp_comp(i) = data_sp_comp(i)(sage,nage) - pred_sp_comp(i);
+    }
+  }
 
-//   //COUT(resd_sp_comp);
+  // COUT(resd_sp_comp);
 
-// FUNCTION void calcEggSurveyResiduals()
-//   /**
-//   - Observed egg data is in trillions of eggs
-//   - Predicted eggs is the mature female numbers-at-age multiplied 
-//     by the fecundity-at-age, which comes from a regession of 
-//     fecundity = slope * obs_sp_waa - intercept
-//   - Note Eij is the Fecundity-at-age j in year i.
-//   - 
-//   */
-//   resd_egg_dep.initialize();
-//   for(int i = mod_syr; i <= mod_nyr; i++){
-//     pred_egg_dep(i) = (0.5 * Oij(i)) * Eij(i);
-//     if(data_egg_dep(i,2) > 0){
-//       resd_egg_dep(i) = log(data_egg_dep(i,2)) - log(pred_egg_dep(i));
-//     }
-//   }
+FUNCTION void calcEggSurveyResiduals()
+  /**
+  - Observed egg data is in trillions of eggs
+  - Predicted eggs is the mature female numbers-at-age multiplied 
+    by the fecundity-at-age, which comes from a regession of 
+    fecundity = slope * obs_sp_waa - intercept
+  - Note Eij is the Fecundity-at-age j in year i.
+  - 
+  */
+  resd_egg_dep.initialize();
+  for(int i = mod_syr; i <= mod_nyr; i++){
+    pred_egg_dep(i) = (0.5 * Oij(i)) * Eij(i); // proportion female * proportion numbers at age * number of eggs
+    // for years with egg data, calculate residuals in log space
+    if(data_egg_dep(i,2) > 0){
+      resd_egg_dep(i) = log(data_egg_dep(i,2)) - log(pred_egg_dep(i));
+    }
+  }
 
-// FUNCTION void calcMiledaySurveyResiduals()
-//   /**
-//   - Assumed index from aerial survey is a relative abundance
-//   index. The slope of the regression ln(SSB) = q * ln(MileMilt) + 0
-//   is computed on the fly in case of missing data. 
-//   - See Walters and Ludwig 1994 for more details.
-//   */
-//   resd_mileday.initialize();
-//   pred_mileday.initialize();
-//   int n = 1;
-//   dvar_vector zt(mod_syr,mod_nyr); zt.initialize();
-//   dvariable zbar = 0;
-//   for(int i = mod_syr; i <= mod_nyr; i++){
-//     if(data_mileday(i,2) > 0){
-//       zt(i) = log(data_mileday(i,2)) - log(ssb(i));
-//       zbar  = zt(i)/n + zbar *(n-1)/n;
-//       n++ ;
-//     }   
-//   }
-//   pred_mileday = ssb * exp(zbar);
-//   resd_mileday = zt - zbar;
-//   // COUT(resd_mileday);
+FUNCTION void calcMiledaySurveyResiduals()
+  /**
+  - Assumed index from aerial survey is a relative abundance
+  index. The slope of the regression ln(SSB) = q * ln(MileMilt) + 0
+  is computed on the fly in case of missing data. 
+  - See Walters and Ludwig 1994 for more details.
+  */
+  // *FLAG* Should this be included at all if there is no data? 
+  resd_mileday.initialize();
+  pred_mileday.initialize();
+  int n = 1;
+  dvar_vector zt(mod_syr,mod_nyr); zt.initialize();
+  dvariable zbar = 0; // z statistic related to residuals and number of observations
+  for(int i = mod_syr; i <= mod_nyr; i++){
+    // for when mileday data is available, calculate residuals between mileday and predicted spawning stock biomass
+    if(data_mileday(i,2) > 0){
+      zt(i) = log(data_mileday(i,2)) - log(ssb(i));
+      zbar  = zt(i)/n + zbar *(n-1)/n;
+      n++ ;// increase n by 1 for each data point
+    }   
+  }
+  pred_mileday = ssb * exp(zbar);
+  resd_mileday = zt - zbar;
+  // COUT(resd_mileday);
 
-// FUNCTION void calcCatchResiduals()
-//   /**
-//   - Catch residuals assuming a lognormal error structure.
-//   */
-//   pred_catch.initialize();
-//   resd_catch.initialize();
-//   for(int i = mod_syr; i <= mod_nyr; i++) {
-//     if(data_catch(i,2) > 0) {
-//       pred_catch(i) = Cij(i) * data_cm_waa(i)(sage,nage);
-//       resd_catch(i) = log(data_catch(i,2)) - log(pred_catch(i));
-//     }
-//   }
+FUNCTION void calcCatchResiduals()
+  /**
+  - Catch residuals assuming a lognormal error structure.
+  */
+  pred_catch.initialize();
+  resd_catch.initialize();
+  for(int i = mod_syr; i <= mod_nyr; i++) {
+    // *FLAG* should be >=0? We want to treat zeros as data
+    // placeholder - catch is negative
+    // catch can be zero and still included in the likelihood - it's observed to be zero, not unobserved
+    // in years with catch data
+    if(data_catch(i,2) > 0) {
+      pred_catch(i) = Cij(i) * data_cm_waa(i)(sage,nage); // predicted catch in weight
+      resd_catch(i) = log(data_catch(i,2)) - log(pred_catch(i)); // residual catch in log space
+    }
+  }
 
-// FUNCTION void calcObjectiveFunction()
-//   /**
-//   - THIS FUNCTION IS ORGANIZED AS FOLLOWS:
-//     1. Negative logliklihoods (nll)
-//     2. Penalized loglikelihoods (penll)
+FUNCTION void calcObjectiveFunction()
+  /**
+  - THIS FUNCTION IS ORGANIZED AS FOLLOWS:
+    1. Negative logliklihoods (nll)
+    2. Penalized loglikelihoods (penll)
 
-//   */
+  */
 
+  // 1. Negative loglikelihoods
+  nll.initialize();
 
-
-//   // 1. Negative loglikelihoods
-//   nll.initialize();
-
-//   // Mulitvariate logistic likelihood for composition data.
-//   double sp_tau2;
-//   double minp = 0.00;
-//   int t1 = mod_syr;
-//   int t2 = mod_nyr;
-//   dmatrix d_sp_comp = trans(trans(data_sp_comp).sub(sage,nage)).sub(t1,t2);
-//   nll(1) = dmvlogistic(d_sp_comp,pred_sp_comp,resd_sp_comp,sp_tau2,minp);
+  // Mulitvariate logistic likelihood for composition data.
+  // five arguments, see Tech doc p. 19-20
+  double sp_tau2;
+  double minp = 0.00;
+  int t1 = mod_syr;
+  int t2 = mod_nyr;
+  // spawning survey composition
+  dmatrix d_sp_comp = trans(trans(data_sp_comp).sub(sage,nage)).sub(t1,t2);
+  nll(1) = dmvlogistic(d_sp_comp,pred_sp_comp,resd_sp_comp,sp_tau2,minp);
   
-//   // Mulitvariate logistic likelihood for composition data.
-//   double cm_tau2;
-//   dmatrix d_cm_comp  = trans(trans(data_cm_comp).sub(sage,nage)).sub(t1,t2);
-//   nll(2) = dmvlogistic(d_cm_comp,pred_cm_comp,resd_cm_comp,cm_tau2,minp);
+  // Mulitvariate logistic likelihood for composition data.
+  double cm_tau2;
+  // commerical catch composition
+  dmatrix d_cm_comp  = trans(trans(data_cm_comp).sub(sage,nage)).sub(t1,t2);
+  nll(2) = dmvlogistic(d_cm_comp,pred_cm_comp,resd_cm_comp,cm_tau2,minp);
 
-//   // Negative loglikelihood for egg deposition data
-//   dvector std_egg_dep = TINY + column(data_egg_dep,3)(t1,t2);
-//   nll(3) = dnorm(resd_egg_dep,std_egg_dep);
+  // Negative loglikelihood for egg deposition data
+  dvector std_egg_dep = TINY + column(data_egg_dep,3)(t1,t2);
+  nll(3) = dnorm(resd_egg_dep,std_egg_dep);
 
-//   // Negative loglikelihood for milt mile day
-//   dvector std_mileday = TINY + column(data_mileday,3)(t1,t2);
-//   nll(4) = dnorm(resd_mileday,std_mileday);
+  // Negative loglikelihood for milt mile day
+  dvector std_mileday = TINY + column(data_mileday,3)(t1,t2);
+  nll(4) = dnorm(resd_mileday,std_mileday);
 
-//   // Negative loglikelihood for stock-recruitment data
-//   dvariable std_rec = log_sigma_r;
-//   nll(5) = dnorm(resd_rec,std_rec);
+  // Negative loglikelihood for stock-recruitment data
+  dvariable std_rec = log_sigma_r;
+  nll(5) = dnorm(resd_rec,std_rec);
   
-//   // Negative loglikelihood for catch data
-//   dvector std_catch = column(data_catch,3)(t1,t2);
-//   nll(6) = dnorm(resd_catch,std_catch);
-
-  
-
-
-
-//   // 2. Penalized logliklelihoods
+  // Negative loglikelihood for catch data
+  dvector std_catch = column(data_catch,3)(t1,t2);
+  nll(6) = dnorm(resd_catch,std_catch);
 
   
-//   dvar_vector penll(1,4);
-//   penll.initialize();
+  // 2. Penalized loglikelihoods
+  
+  // dvar_vector penll(1,4);
+  penll.initialize();
 
-//   // | Terminal phase of estimation.
-//   dvariable log_fbar = mean(log_ft_pars);
-//   if( last_phase() ){
-//     penll(1) = dnorm(log_rinit_devs,0.0,5.0);
-//     penll(2) = dnorm(log_rbar_devs,0.0,5.0);
-//     penll(3) = dnorm(log_fbar,0.2,2.0);
+  // | Terminal phase of estimation.
+  // different standard deviation for normal likelihood in last phase of estimation
+  // during estimation the deviations can't be very far from zero
+  // in the last phase, can vary deviations further from zero if there is still process noise that needs to be explained not just by varying parameter estimates
+  dvariable log_fbar = mean(log_ft_pars);
+  if( last_phase() ){
+    penll(1) = dnorm(log_rinit_devs,0.0,5.0);
+    penll(2) = dnorm(log_rbar_devs,0.0,5.0);
+    penll(3) = dnorm(log_fbar,0.2,2.0);
 
-//   } else {
-//     penll(1) = dnorm(log_rinit_devs,0.0,1.0);
-//     penll(2) = dnorm(log_rbar_devs,0.0,1.0);
-//     penll(3) = dnorm(log_fbar,0.2,0.07); 
-//   }
+  } else {
+    penll(1) = dnorm(log_rinit_devs,0.0,1.0);
+    penll(2) = dnorm(log_rbar_devs,0.0,1.0);
+    penll(3) = dnorm(log_fbar,0.2,0.07); 
+  }
 
-//   if( active(log_m_devs) ) {
-//     penll(4) = dnorm(log_m_devs,0.0,dMiscCont(6));     
-//   }
+  // if log_m_devs is estimated in the particular phase, calculate penalty
+  if( active(log_m_devs) ) {
+    penll(4) = dnorm(log_m_devs,0.0,dMiscCont(6));     
+  }
 
 
-//   //FUNCTION dvariable dnorm(const dvar_vector residual, const dvector std)
-//   //RETURN_ARRAYS_INCREMENT();
-//   //double pi=3.141593;
-//   //int n=size_count(residual);
-//   //dvector var=elem_prod(std,std);
-//   //dvar_vector SS=elem_prod(residual,residual);
-//   //RETURN_ARRAYS_DECREMENT();
-//   //return(0.5*n*log(2.*pi)+sum(log(std))+sum(elem_div(SS,2.*var)));
+  //FUNCTION dvariable dnorm(const dvar_vector residual, const dvector std)
+  //RETURN_ARRAYS_INCREMENT();
+  //double pi=3.141593;
+  //int n=size_count(residual);
+  //dvector var=elem_prod(std,std);
+  //dvar_vector SS=elem_prod(residual,residual);
+  //RETURN_ARRAYS_DECREMENT();
+  //return(0.5*n*log(2.*pi)+sum(log(std))+sum(elem_div(SS,2.*var)));
 
-// FUNCTION dvar_vector calcPriors()
-//   // |---------------------------------------------------------------------------------|
-//   // | PRIORS FOR LEADING PARAMETERS p(theta)
-//   // |---------------------------------------------------------------------------------|
-//   // | - theta_prior is a switch to determine which statistical distribution to use.
-//   // |
-//   dvariable ptmp; 
-//   dvar_vector priors(1,n_theta);
-//   priors.initialize();
+FUNCTION dvar_vector calcPriors()
+  // |---------------------------------------------------------------------------------|
+  // | PRIORS FOR LEADING PARAMETERS p(theta)
+  // |---------------------------------------------------------------------------------|
+  // | - theta_prior is a switch to determine which statistical distribution to use.
+  // |
+  dvariable ptmp; 
+  dvar_vector priors(1,n_theta);
+  priors.initialize();
 
-//   for(int i=1;i<=n_theta;i++)
-//   {
-//     ptmp = 0;
-//     // for(j=1;j<=ipar_vector(i);j++)
-//     // {
-//       if( active(theta(i)) )
-//       {
-//         switch(theta_iprior(i))
-//         {
-//         case 1:   //normal
-//           ptmp += dnorm(theta(i),theta_p1(i),theta_p2(i));
-//           break;
+  // match up prior type designated in the control file with distribution
+  for(int i=1;i<=n_theta;i++)
+  {
+    ptmp = 0;
+    // for(j=1;j<=ipar_vector(i);j++)
+    // {
+      // if parameter theta(i) is estimated in current phase, include appropriate prior
+      if( active(theta(i)) )
+      {
+        switch(theta_iprior(i))
+        {
+        case 1:   //normal
+          ptmp += dnorm(theta(i),theta_p1(i),theta_p2(i));
+          break;
           
-//         case 2:   //lognormal CHANGED RF found an error in dlnorm prior. rev 116
-//           ptmp += dlnorm(theta(i),theta_p1(i),theta_p2(i));
-//           break;
+        case 2:   //lognormal CHANGED RF found an error in dlnorm prior. rev 116
+          ptmp += dlnorm(theta(i),theta_p1(i),theta_p2(i));
+          break;
           
-//         case 3:   //beta distribution (0-1 scale)
-//           double lb,ub;
-//           lb=theta_lb(i);
-//           ub=theta_ub(i);
-//           ptmp += dbeta((theta(i)-lb)/(ub-lb),theta_p1(i),theta_p2(i));
-//           break;
+        case 3:   //beta distribution (0-1 scale)
+          double lb,ub;
+          lb=theta_lb(i);
+          ub=theta_ub(i);
+          ptmp += dbeta((theta(i)-lb)/(ub-lb),theta_p1(i),theta_p2(i));
+          break;
           
-//         case 4:   //gamma distribution
-//           ptmp += dgamma(theta(i),theta_p1(i),theta_p2(i));
-//           break;
+        case 4:   //gamma distribution
+          ptmp += dgamma(theta(i),theta_p1(i),theta_p2(i));
+          break;
           
-//         default:  //uniform density
-//           if(theta_lb(i) > theta_ub(i)){
-//             ptmp += log(1./(theta_lb(i)-theta_ub(i)));
-//           } else {
-//             ptmp += log(1./(theta_ub(i)-theta_lb(i)));
-//           }
-//           break;
-//         }
-//       }
-//     // }
-//     priors(i) = ptmp; 
-//   }
-//   return(priors);
+        default:  //uniform density
+          if(theta_lb(i) > theta_ub(i)){
+            ptmp += log(1./(theta_lb(i)-theta_ub(i)));
+          } else {
+            ptmp += log(1./(theta_ub(i)-theta_lb(i)));
+          }
+          break;
+        }
+      }
+    // }
+    priors(i) = ptmp; 
+  }
+  return(priors);
 
 
 GLOBALS_SECTION
@@ -1344,333 +1449,339 @@ GLOBALS_SECTION
   #include <string.h>
   #include <time.h>
 
-//   #undef EOF
-//   #define EOF 999
+  #undef EOF
+  #define EOF 999
 
-//   #undef TINY
-//   #define TINY  1.0e-10
+  #undef TINY
+  #define TINY  1.0e-10
 
-//   #undef REPORT
-//   #define REPORT(object) report << #object "\n" << setw(8) \
-//   << setprecision(4) << setfixed() << object << endl;
+  #undef REPORT
+  #define REPORT(object) report << #object "\n" << setw(8) \
+  << setprecision(4) << setfixed() << object << endl;
 
   #undef COUT
   #define COUT(object) cout << #object "\n" << setw(6) \
   << setprecision(3) << setfixed() << object << endl;
 
-//   template<typename T>
-//   dvar_vector plogis(const dvector x, T location, T scale)
-//   {
-//     return(1.0 / (1.0 + mfexp(-(x-location)/scale)));
-//   }
+  template<typename T>
+  dvar_vector plogis(const dvector x, T location, T scale)
+  {
+    return(1.0 / (1.0 + mfexp(-(x-location)/scale)));
+  }
 
-//   dvar_vector plogis(const dvector x, dvariable location, dvariable scale)
-//   {
-//     return(1.0 / (1.0 + mfexp(-(x-location)/scale)));
-//   }
+  dvar_vector plogis(const dvector x, dvariable location, dvariable scale)
+  {
+    return(1.0 / (1.0 + mfexp(-(x-location)/scale)));
+  }
 
-//   dvar_vector plogis(const dvector x, prevariable location, prevariable scale)
-//   {
-//     return(1.0 / (1.0 + mfexp(-(x-location)/scale)));
-//   }
+  dvar_vector plogis(const dvector x, prevariable location, prevariable scale)
+  {
+    return(1.0 / (1.0 + mfexp(-(x-location)/scale)));
+  }
 
-//   template<typename T>
-//   dvar_vector plogis95(const dvector x, T a50, T a95)
-//   {
-//     return(1.0 / (1.0 + mfexp(-log(19)*(x-a50)/(a95-a50))));
-//   }
+  template<typename T>
+  dvar_vector plogis95(const dvector x, T a50, T a95)
+  {
+    return(1.0 / (1.0 + mfexp(-log(19)*(x-a50)/(a95-a50))));
+  }
 
 
-//   dvariable dmvlogistic(const dmatrix o, const dvar_matrix& p,dvar_matrix& nu, double& tau2,const double minp)
-//   { //returns the negative loglikelihood using the MLE for the variance
-//   /*
-//     This is a modified version of the dmvlogistic negative log likelihood
-//     where proportions at age less than minp are pooled into the consecutive 
-//     age-classes.  See last paragraph in Appendix A of Richards, Schnute and
-//     Olsen 1997. 
+  // requiers 5 arguments
+  // observed and predicted composition matrices
+  // matrix for returning residuals
+  // variable for conditional MLE ofr variance of initial observation errors
+  // threshold value minp
+  dvariable dmvlogistic(const dmatrix o, const dvar_matrix& p,dvar_matrix& nu, double& tau2,const double minp)
+  { //returns the negative loglikelihood using the MLE for the variance
+  /*
+    This is a modified version of the dmvlogistic negative log likelihood
+    where proportions at age less than minp are pooled into the consecutive 
+    age-classes.  See last paragraph in Appendix A of Richards, Schnute and
+    Olsen 1997. 
     
-//     NB minp must be greater than 0, otherwise this algorithm returns an
-//     error if one of the observed proportions is zero.
+    NB minp must be greater than 0, otherwise this algorithm returns an
+    error if one of the observed proportions is zero.
     
-//     -1) first count the number of observations for each year > minp
-//     -2) normalized observed and predicted age-proportions
-//     -3) loop over ages, and check if observed proportion is < minp
-//         -if yes, then add observed proprtion to bin k
-//         -if no then add observed proportion to bin k and increment
-//          bin k if k is currently less than the number of bins.
-//     -4) do the same grouping for the predicted proportions.
-//     -5) use ivector iiage to correctly assign residuals into nu
+    -1) first count the number of observations for each year > minp
+    -2) normalized observed and predicted age-proportions
+    -3) loop over ages, and check if observed proportion is < minp
+        -if yes, then add observed proprtion to bin k
+        -if no then add observed proportion to bin k and increment
+         bin k if k is currently less than the number of bins.
+    -4) do the same grouping for the predicted proportions.
+    -5) use ivector iiage to correctly assign residuals into nu
     
-//     FEB 8, 2011.  Fixed a bug in the variance calculation & 
-//     likelihood scaling that was discovered at the 2011 Hake
-//     assessment STAR panel in Seattle.
-//   */
-//   RETURN_ARRAYS_INCREMENT();
-//   int i,j,k,n;
-//   int age_counts=0;
-//   int a = o.colmin();
-//   int A=o.colmax();
-//   double tiny=0.001/(A-a+1);
-//   int t=o.rowmin();
-//   int T=o.rowmax();
-//   dvariable tau_hat2;   //mle of the variance
-//   //dvar_matrix nu(t,T,a,A);
-//   nu.initialize();
+    FEB 8, 2011.  Fixed a bug in the variance calculation & 
+    likelihood scaling that was discovered at the 2011 Hake
+    assessment STAR panel in Seattle.
+  */
+  RETURN_ARRAYS_INCREMENT();
+  int i,j,k,n;
+  int age_counts=0;
+  int a = o.colmin();
+  int A=o.colmax();
+  double tiny=0.001/(A-a+1);
+  int t=o.rowmin();
+  int T=o.rowmax();
+  dvariable tau_hat2;   //mle of the variance
+  //dvar_matrix nu(t,T,a,A);
+  nu.initialize();
   
 
-//   for(i=t; i<=T; i++)
-//   { 
-//     n=0;
-//     dvector oo = o(i)/sum(o(i));
-//     dvar_vector pp = p(i)/sum(p(i));
+  for(i=t; i<=T; i++)
+  { 
+    n=0;
+    dvector oo = o(i)/sum(o(i));
+    dvar_vector pp = p(i)/sum(p(i));
     
-//     //count # of observations greater than minp (2% is a reasonable number)
-//     for(j=a;j<=A;j++)
-//       if(oo(j) > minp)n++;
+    //count # of observations greater than minp (2% is a reasonable number)
+    for(j=a;j<=A;j++)
+      if(oo(j) > minp)n++;
     
-//     ivector iiage(1,n);
-//     dvector o1(1,n); o1.initialize();
-//     dvar_vector p1(1,n); p1.initialize();
-//     k=1;
-//     for(j=a;j<=A;j++)
-//     {
-//       if(oo(j)<=minp)
-//       {
-//         o1(k)+=oo(j);
-//         p1(k)+=pp(j);
-//       }
-//       else
-//       {
-//         o1(k)+=oo(j);
-//         p1(k)+=pp(j);
-//         if(k<=n)iiage(k)=j;   //ivector for the grouped residuals
-//         if(k<n) k++;
-//       }
-//     }
+    ivector iiage(1,n);
+    dvector o1(1,n); o1.initialize();
+    dvar_vector p1(1,n); p1.initialize();
+    k=1;
+    for(j=a;j<=A;j++)
+    {
+      if(oo(j)<=minp)
+      {
+        o1(k)+=oo(j);
+        p1(k)+=pp(j);
+      }
+      else
+      {
+        o1(k)+=oo(j);
+        p1(k)+=pp(j);
+        if(k<=n)iiage(k)=j;   //ivector for the grouped residuals
+        if(k<n) k++;
+      }
+    }
     
-//     //assign residuals to nu based on iiage index
-//     dvar_vector t1 = log(o1)-log(p1) - mean(log(o1)-log(p1));
+    //assign residuals to nu based on iiage index
+    dvar_vector t1 = log(o1)-log(p1) - mean(log(o1)-log(p1));
     
 
-//     for(j=1;j<=n;j++)
-//       nu(i)(iiage(j))=t1(j);
+    for(j=1;j<=n;j++)
+      nu(i)(iiage(j))=t1(j);
     
-//     age_counts += n-1;
-//   }
-//   //Depricated  Wrong Variance & likelihood calculation.
-//   //tau_hat2 = 1./(age_counts*(T-t+1))*norm2(nu);
-//   //dvariable nloglike =(age_counts*(T-t+1))*log(tau_hat2);
+    age_counts += n-1;
+  }
+  //Depricated  Wrong Variance & likelihood calculation.
+  //tau_hat2 = 1./(age_counts*(T-t+1))*norm2(nu);
+  //dvariable nloglike =(age_counts*(T-t+1))*log(tau_hat2);
   
-//   //Feb 8, 2011  Fixed variance & likelihood
-//   tau_hat2 = 1./(age_counts)*norm2(nu);
-//   dvariable nloglike =(age_counts)*log(tau_hat2);
-//   tau2=value(tau_hat2); //mle of the variance 
-//   RETURN_ARRAYS_DECREMENT();
-//   return(nloglike);
-//   }
-//   double dicValue;
-//   double dicNoPar;
-//   void function_minimizer::mcmc_eval(void)
-//   {
-//     // |---------------------------------------------------------------------------|
-//     // | Added DIC calculation.  Martell, Jan 29, 2013                             |
-//     // |---------------------------------------------------------------------------|
-//     // | DIC = pd + dbar
-//     // | pd  = dbar - dtheta  (Effective number of parameters)
-//     // | dbar   = expectation of the likelihood function (average f)
-//     // | dtheta = expectation of the parameter sample (average y) 
+  //Feb 8, 2011  Fixed variance & likelihood
+  tau_hat2 = 1./(age_counts)*norm2(nu);
+  dvariable nloglike =(age_counts)*log(tau_hat2);
+  tau2=value(tau_hat2); //mle of the variance 
+  RETURN_ARRAYS_DECREMENT();
+  return(nloglike);
+ }
 
-//     gradient_structure::set_NO_DERIVATIVES();
-//     initial_params::current_phase=initial_params::max_number_phases;
-//     uistream * pifs_psave = NULL;
+  double dicValue;
+  double dicNoPar;
+  void function_minimizer::mcmc_eval(void)
+  {
+    // |---------------------------------------------------------------------------|
+    // | Added DIC calculation.  Martell, Jan 29, 2013                             |
+    // |---------------------------------------------------------------------------|
+    // | DIC = pd + dbar
+    // | pd  = dbar - dtheta  (Effective number of parameters)
+    // | dbar   = expectation of the likelihood function (average f)
+    // | dtheta = expectation of the parameter sample (average y) 
 
-//   #if defined(USE_LAPLACE)
-//   #endif
+    gradient_structure::set_NO_DERIVATIVES();
+    initial_params::current_phase=initial_params::max_number_phases;
+    uistream * pifs_psave = NULL;
 
-//   #if defined(USE_LAPLACE)
-//       initial_params::set_active_random_effects();
-//       int nvar1=initial_params::nvarcalc(); 
-//   #else
-//     int nvar1=initial_params::nvarcalc(); // get the number of active parameters
-//   #endif
-//     int nvar;
+  #if defined(USE_LAPLACE)
+  #endif
+
+  #if defined(USE_LAPLACE)
+      initial_params::set_active_random_effects();
+      int nvar1=initial_params::nvarcalc(); 
+  #else
+    int nvar1=initial_params::nvarcalc(); // get the number of active parameters
+  #endif
+    int nvar;
     
-//     pifs_psave= new
-//       uistream((char*)(ad_comm::adprogram_name + adstring(".psv")));
-//     if (!pifs_psave || !(*pifs_psave))
-//     {
-//       cerr << "Error opening file "
-//               << (char*)(ad_comm::adprogram_name + adstring(".psv"))
-//          << endl;
-//       if (pifs_psave)
-//       {
-//         delete pifs_psave;
-//         pifs_psave=NULL;
-//         return;
-//       }
-//     }
-//     else
-//     {     
-//       (*pifs_psave) >> nvar;
-//       if (nvar!=nvar1)
-//       {
-//         cout << "Incorrect value for nvar in file "
-//              << "should be " << nvar1 << " but read " << nvar << endl;
-//         if (pifs_psave)
-//         {
-//           delete pifs_psave;
-//           pifs_psave=NULL;
-//         }
-//         return;
-//       }
-//     }
+    pifs_psave= new
+      uistream((char*)(ad_comm::adprogram_name + adstring(".psv")));
+    if (!pifs_psave || !(*pifs_psave))
+    {
+      cerr << "Error opening file "
+              << (char*)(ad_comm::adprogram_name + adstring(".psv"))
+         << endl;
+      if (pifs_psave)
+      {
+        delete pifs_psave;
+        pifs_psave=NULL;
+        return;
+      }
+    }
+    else
+    {     
+      (*pifs_psave) >> nvar;
+      if (nvar!=nvar1)
+      {
+        cout << "Incorrect value for nvar in file "
+             << "should be " << nvar1 << " but read " << nvar << endl;
+        if (pifs_psave)
+        {
+          delete pifs_psave;
+          pifs_psave=NULL;
+        }
+        return;
+      }
+    }
   
-//     int nsamp = 0;
-//     double sumll = 0;
-//     independent_variables y(1,nvar);
-//     independent_variables sumy(1,nvar);
+    int nsamp = 0;
+    double sumll = 0;
+    independent_variables y(1,nvar);
+    independent_variables sumy(1,nvar);
 
-//     do
-//     {
-//       if (pifs_psave->eof())
-//       {
-//         break;
-//       }
-//       else
-//       {
-//         (*pifs_psave) >> y;
-//         sumy = sumy + y;
-//         if (pifs_psave->eof())
-//         {
-//           double dbar = sumll/nsamp;
-//           int ii=1;
-//           y = sumy/nsamp;
-//           initial_params::restore_all_values(y,ii);
-//           initial_params::xinit(y);   
-//           double dtheta = 2.0 * get_monte_carlo_value(nvar,y);
-//           double pd     = dbar - dtheta;
-//           double dic    = pd + dbar;
-//           dicValue      = dic;
-//           dicNoPar      = pd;
+    do
+    {
+      if (pifs_psave->eof())
+      {
+        break;
+      }
+      else
+      {
+        (*pifs_psave) >> y;
+        sumy = sumy + y;
+        if (pifs_psave->eof())
+        {
+          double dbar = sumll/nsamp;
+          int ii=1;
+          y = sumy/nsamp;
+          initial_params::restore_all_values(y,ii);
+          initial_params::xinit(y);   
+          double dtheta = 2.0 * get_monte_carlo_value(nvar,y);
+          double pd     = dbar - dtheta;
+          double dic    = pd + dbar;
+          dicValue      = dic;
+          dicNoPar      = pd;
 
-//           cout<<"Number of posterior samples    = "<<nsamp    <<endl;
-//           cout<<"Expectation of log-likelihood  = "<<dbar     <<endl;
-//           cout<<"Expectation of theta           = "<<dtheta   <<endl;
-//           cout<<"Number of estimated parameters = "<<nvar1    <<endl;
-//           cout<<"Effective number of parameters = "<<dicNoPar <<endl;
-//           cout<<"DIC                            = "<<dicValue <<endl;
-//           break;
-//         }
-//         int ii=1;
-//         initial_params::restore_all_values(y,ii);
-//         initial_params::xinit(y);   
-//         double ll = 2.0 * get_monte_carlo_value(nvar,y);
-//         sumll    += ll;
-//         nsamp++;
-//         // cout<<sumy(1,3)/nsamp<<" "<<get_monte_carlo_value(nvar,y)<<endl;
-//       }
-//     }
-//     while(1);
-//     if (pifs_psave)
-//     {
-//       delete pifs_psave;
-//       pifs_psave=NULL;
-//     }
-//     return;
-//   }
+          cout<<"Number of posterior samples    = "<<nsamp    <<endl;
+          cout<<"Expectation of log-likelihood  = "<<dbar     <<endl;
+          cout<<"Expectation of theta           = "<<dtheta   <<endl;
+          cout<<"Number of estimated parameters = "<<nvar1    <<endl;
+          cout<<"Effective number of parameters = "<<dicNoPar <<endl;
+          cout<<"DIC                            = "<<dicValue <<endl;
+          break;
+        }
+        int ii=1;
+        initial_params::restore_all_values(y,ii);
+        initial_params::xinit(y);   
+        double ll = 2.0 * get_monte_carlo_value(nvar,y);
+        sumll    += ll;
+        nsamp++;
+        // cout<<sumy(1,3)/nsamp<<" "<<get_monte_carlo_value(nvar,y)<<endl;
+      }
+    }
+    while(1);
+    if (pifs_psave)
+    {
+      delete pifs_psave;
+      pifs_psave=NULL;
+    }
+    return;
+  }
 
-// REPORT_SECTION
-// // Write out Raw Data (Useful for simulation studies)
-// // Note that I use a Macro called REPORT here to ensure a standard format.
-//   REPORT(dat_syr);
-//   REPORT(dat_nyr);
-//   REPORT(mod_syr);
-//   REPORT(mod_nyr);
-//   REPORT(sage);
-//   REPORT(nage);
-//   REPORT(nFecBlocks);
-//   REPORT(nFecBlockYears);
-//   REPORT(fec_slope);
-//   REPORT(fec_inter);
-//   REPORT(data_ct_raw);
-//   REPORT(data_sp_waa);
-//   REPORT(data_cm_waa);
-//   REPORT(data_cm_comp);
-//   REPORT(data_sp_comp);
-//   REPORT(data_egg_dep);
-//   REPORT(data_mileday);
-//   REPORT(EOF)
-// // END of Replicated Data File. (run model with -noest to check data)
+REPORT_SECTION
+// Write out Raw Data (Useful for simulation studies)
+// Note that I use a Macro called REPORT here to ensure a standard format.
+  REPORT(dat_syr);
+  REPORT(dat_nyr);
+  REPORT(mod_syr);
+  REPORT(mod_nyr);
+  REPORT(sage);
+  REPORT(nage);
+  REPORT(nFecBlocks);
+  REPORT(nFecBlockYears);
+  REPORT(fec_slope);
+  REPORT(fec_inter);
+  REPORT(data_ct_raw);
+  REPORT(data_sp_waa);
+  REPORT(data_cm_waa);
+  REPORT(data_cm_comp);
+  REPORT(data_sp_comp);
+  REPORT(data_egg_dep);
+  REPORT(data_mileday);
+  REPORT(EOF)
+// END of Replicated Data File. (run model with -noest to check data)
   
-// // Negative loglikelihoods
-//   REPORT(nll);
+// Negative loglikelihoods
+  REPORT(nll);
 
-// // Vectors of years.
-//   ivector year(mod_syr,mod_nyr);
-//   year.fill_seqadd(mod_syr,1);
+// Vectors of years.
+  ivector year(mod_syr,mod_nyr);
+  year.fill_seqadd(mod_syr,1);
   
-//   ivector years(mod_syr,mod_nyr+1);
-//   years.fill_seqadd(mod_syr,1);
+  ivector years(mod_syr,mod_nyr+1);
+  years.fill_seqadd(mod_syr,1);
 
-//   ivector rec_years(rec_syr,mod_nyr+1);
-//   rec_years.fill_seqadd(rec_syr,1);
+  ivector rec_years(rec_syr,mod_nyr+1);
+  rec_years.fill_seqadd(rec_syr,1);
 
-//   ivector iage = ivector(age);
+  ivector iage = ivector(age);
 
-//   REPORT(iage);
-//   REPORT(year);
-//   REPORT(years);
-//   REPORT(rec_years);
-//   REPORT(data_catch);
-//   REPORT(pred_catch);
+  REPORT(iage);
+  REPORT(year);
+  REPORT(years);
+  REPORT(rec_years);
+  REPORT(data_catch);
+  REPORT(pred_catch);
 
-// // SSB, recruits, spawners,
-//   REPORT(ssb);
-//   REPORT(spawners);
-//   REPORT(recruits);
-//   REPORT(pred_egg_dep);
+// SSB, recruits, spawners,
+  REPORT(ssb);
+  REPORT(spawners);
+  REPORT(recruits);
+  REPORT(pred_egg_dep);
 
-// // Numbers-at-age of various flavors.
-//   REPORT(Nij);
-//   REPORT(Oij);
-//   REPORT(Pij);
-//   REPORT(Cij);
+// Numbers-at-age of various flavors.
+  REPORT(Nij);
+  REPORT(Oij);
+  REPORT(Pij);
+  REPORT(Cij);
 
-// // Selectivity and vulnerable proportion-at-age.
-//   REPORT(Sij);
-//   REPORT(Qij);
+// Selectivity and vulnerable proportion-at-age.
+  REPORT(Sij);
+  REPORT(Qij);
 
-// // Natural mortality
-//   REPORT(Mij);
+// Natural mortality
+  REPORT(Mij);
 
-// // Fishing mortality
-//   dvector ft = value(exp(log_ft_pars));
-//   REPORT(ft);
-//   REPORT(Fij);
+// Fishing mortality
+  dvector ft = value(exp(log_ft_pars));
+  REPORT(ft);
+  REPORT(Fij);
 
 
-// // Residuals
-//   REPORT(resd_egg_dep);
-//   REPORT(resd_mileday);
-//   REPORT(resd_rec);
-//   REPORT(resd_catch);
-//   REPORT(resd_sp_comp);
-//   REPORT(resd_cm_comp);
+// Residuals
+  REPORT(resd_egg_dep);
+  REPORT(resd_mileday);
+  REPORT(resd_rec);
+  REPORT(resd_catch);
+  REPORT(resd_sp_comp);
+  REPORT(resd_cm_comp);
   
-// // Forecast output
-//   REPORT(fore_sb);
-//   REPORT(fore_vb);
-//   REPORT(ghl);
+// Forecast output
+  REPORT(fore_sb);
+  REPORT(fore_vb);
+  REPORT(ghl);
 
-// // Initial parameter values from simulation studies.
-//   REPORT(theta_ival);
-//   REPORT(theta);
+// Initial parameter values from simulation studies.
+  REPORT(theta_ival);
+  REPORT(theta);
 
-// // Simulation spawning stock biomass
-//   if(b_simulation_flag) {
-//     REPORT(sim_spawners);
-//     REPORT(sim_recruits);
-//   }
+// Simulation spawning stock biomass
+  if(b_simulation_flag) {
+    REPORT(sim_spawners);
+    REPORT(sim_recruits);
+  }
 
 
 // FINAL_SECTION
