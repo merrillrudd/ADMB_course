@@ -108,4 +108,32 @@ for(i in 1:length(retro)){
 		lines(VB[[i]], col=col)
 	}
 
+
+# Alaska Fisheries Science Center and Hurtado-Ferro et al. (2015) Mohn's rho 
+# https://www.afsc.noaa.gov/REFM/stocks/Plan_Team/2013/Sept/Retrospectives_2013_final3.pdf
+# rhho <- (sum over p [ (X_y-p,p -X_y-p,0) / X_y-p,0]) / P
+	
+# Note this example doesn't yield meaningful results b/c the 5th peel (referenced as
+# 6th) did not converge
+	
+# generalize the parameter of interest (Rec, VB or Fish)
+myPar <- Rec
+
+# number of peels (number of yrs for which retrospective analysis was
+# conducted)
+P <- length(retro)
+
+# total number of years in time series
+Y <- length(myPar[[1]])	
+
+tmp <- list()
+
+# Indexed from 0 to make it easier to extract reference estimate.
+for(p in 0:(P-1)){
+  # Estimate in peel year - reference estimate (current year's estimate) / reference estimate
+  tmp[p] <- (myPar[[p+1]][Y-p] - myPar[[1]][Y-p]) / myPar[[1]][Y-p]
+}
+
+# Take the summation and divide by the number of peels
+do.call("sum", tmp) / P
 	
